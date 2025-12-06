@@ -1,0 +1,2 @@
+# Allow cursor to update the example .env file
+!.env.example
