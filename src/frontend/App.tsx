@@ -23,7 +23,7 @@ function TimestampDisplay({ timestamp, offset }: { timestamp: number; offset?: n
   const now = useNow(200);
 
   const delta = now - timestamp - offset;
-  const abs = Math.abs(delta);
+  const abs = Math.abs(delta) / 1000;
   const pos = delta > 0;
 
   return (
