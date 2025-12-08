@@ -126,18 +126,6 @@ export default function App() {
       </header>
 
       <main>
-        <section className="dashboard">
-          <h2>Device Status</h2>
-          <div className="state-grid">
-            <div className="state-item">
-              <span className="label">Last Update:</span>
-              <span className="value">{new Date(state.lastUpdate).toLocaleTimeString()}</span>{' '}
-              <TimestampDisplay timestamp={state.lastUpdate} offset={timeOffset} /> ago
-            </div>
-            {/* TODO: Add more device-specific state displays */}
-          </div>
-        </section>
-
         <section className="controls">
           <h2>Device Controls</h2>
           <div className="control-panel">
