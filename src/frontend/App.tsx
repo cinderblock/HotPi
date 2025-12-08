@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { useDeviceState, useSerialMessages } from './hooks/useDeviceData';
-import { useWebSocketConnection } from './hooks/useWebSocket';
+import type { ConnectionChain, ConnectionStatus } from './api-client.ts';
+import { useDeviceState, useSerialMessages } from './hooks/useDeviceData.ts';
+import { useWebSocketConnection } from './hooks/useWebSocket.ts';
 
 function useNow(interval = 1000) {
   const [now, setNow] = useState(Date.now());

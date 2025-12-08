@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import type { DeviceState, SerialMessage } from '../api-client';
+import type { DeviceState, SerialMessage } from '../api-client.ts';
 
 export function useDeviceState() {
   return useQuery<DeviceState>({
