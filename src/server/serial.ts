@@ -53,6 +53,9 @@ const SkipPacketWithFailedChecksum = true;
 
 export class SerialManager {
   private fileHandle: FileHandle | null = null;
+  private connectCommandSent: boolean = false;
+  private lastPacketReceived: number = 0;
+  private readonly DEVICE_TIMEOUT_MS = 5000; // 5 seconds
 
   constructor(
     private portPath: string = '/dev/serial0',
@@ -153,10 +156,17 @@ export class SerialManager {
     if (packet[0] !== StartToken) return false;
     if (packet[EndIndex] !== EndToken) return false;
 
+    logger.info('📥 Received block:', packet.toString('hex'));
+
     // If the checksum is not 0, the packet is invalid. Return true to discard the data.
     if (checksum(packet.slice(1, EndIndex))) return SkipPacketWithFailedChecksum;
 
     const data = Buffer.from(packet.slice(1, ChecksumIndex));
+
+    logger.info('📥 Received valid packet:', data.toString('hex'));
+
+    // Record packet received timestamp
+    this.lastPacketReceived = Date.now();
 
     for (const listener of this.packetListeners) listener(data);
 
@@ -233,7 +243,8 @@ export class SerialManager {
    *           fa   05   00   00   00   00   00   00   05   f8
    */
   async sendConnectCommand(): Promise<void> {
-    console.log('📤 Sending START command...');
+    logger.info('📤 Sending START command...');
+    this.connectCommandSent = true;
     await this.sendPacket(Buffer.from([0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]));
   }
   /**
@@ -241,8 +252,39 @@ export class SerialManager {
    * Packet: 0xFA 0x06 0x00 0x00 0x00 0x00 0x00 0x00 0x06 0xF8
    */
   async sendDisconnectCommand(): Promise<void> {
-    console.log('📤 Sending STOP command...');
+    logger.info('📤 Sending STOP command...');
+    this.connectCommandSent = false;
+    this.lastPacketReceived = 0;
     await this.sendPacket(Buffer.from([0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]));
+  }
+
+  /**
+   * Check if serial port is open
+   */
+  isPortOpen(): boolean {
+    return this.fileHandle !== null;
+  }
+
+  /**
+   * Check if device is connected
+   * Device is considered connected if:
+   * - Connect command has been sent
+   * - At least one packet has been received after the command
+   * - Last packet received within the timeout window
+   */
+  isDeviceConnected(): boolean {
+    if (!this.connectCommandSent || this.lastPacketReceived === 0) {
+      return false;
+    }
+    const now = Date.now();
+    return now - this.lastPacketReceived < this.DEVICE_TIMEOUT_MS;
+  }
+
+  /**
+   * Get last packet received timestamp
+   */
+  getLastPacketTime(): number {
+    return this.lastPacketReceived;
   }
 
   async sendStopCommand(): Promise<void> {

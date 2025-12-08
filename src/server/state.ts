@@ -6,12 +6,29 @@
  */
 
 /**
+ * Connection status for each link in the chain
+ */
+export interface ConnectionStatus {
+  connected: boolean;
+  lastActivity: number;
+}
+
+/**
+ * Connection chain showing status of each communication link
+ */
+export interface ConnectionChain {
+  websocket: ConnectionStatus;
+  serialPort: ConnectionStatus;
+  device: ConnectionStatus;
+}
+
+/**
  * Placeholder for device-specific state properties
  * Replace with actual fields once protocol is understood
  */
 export interface DeviceState {
-  connected: boolean;
   lastUpdate: number;
+  connectionChain: ConnectionChain;
 
   // TODO: Add device-specific state properties based on protocol
   // Examples of possible fields (replace with actual):
@@ -40,9 +57,14 @@ export class StateManager {
   private readonly MAX_MESSAGES = 1000;
 
   constructor() {
+    const now = Date.now();
     this.state = {
-      connected: false,
-      lastUpdate: Date.now(),
+      lastUpdate: now,
+      connectionChain: {
+        websocket: { connected: false, lastActivity: now },
+        serialPort: { connected: false, lastActivity: now },
+        device: { connected: false, lastActivity: now },
+      },
     };
     this.listeners = new Set();
   }
@@ -55,11 +77,71 @@ export class StateManager {
   }
 
   /**
-   * Update connection status
+   * Update WebSocket connection status
    */
-  updateConnectionStatus(connected: boolean) {
-    this.state.connected = connected;
-    this.state.lastUpdate = Date.now();
+  updateWebSocketStatus(connected: boolean) {
+    const now = Date.now();
+    this.state.connectionChain.websocket.connected = connected;
+    if (connected) {
+      this.state.connectionChain.websocket.lastActivity = now;
+    }
+    this.state.lastUpdate = now;
+    this.notifyListeners();
+  }
+
+  /**
+   * Update serial port connection status
+   */
+  updateSerialPortStatus(connected: boolean) {
+    const now = Date.now();
+    this.state.connectionChain.serialPort.connected = connected;
+    if (connected) {
+      this.state.connectionChain.serialPort.lastActivity = now;
+    }
+    this.state.lastUpdate = now;
+    this.notifyListeners();
+  }
+
+  /**
+   * Update device connection status
+   */
+  updateDeviceStatus(connected: boolean) {
+    const now = Date.now();
+    this.state.connectionChain.device.connected = connected;
+    if (connected) {
+      this.state.connectionChain.device.lastActivity = now;
+    }
+    this.state.lastUpdate = now;
+    this.notifyListeners();
+  }
+
+  /**
+   * Record WebSocket activity
+   */
+  recordWebSocketActivity() {
+    const now = Date.now();
+    this.state.connectionChain.websocket.lastActivity = now;
+    this.state.lastUpdate = now;
+    this.notifyListeners();
+  }
+
+  /**
+   * Record serial port activity
+   */
+  recordSerialPortActivity() {
+    const now = Date.now();
+    this.state.connectionChain.serialPort.lastActivity = now;
+    this.state.lastUpdate = now;
+    this.notifyListeners();
+  }
+
+  /**
+   * Record device activity (packet received)
+   */
+  recordDeviceActivity() {
+    const now = Date.now();
+    this.state.connectionChain.device.lastActivity = now;
+    this.state.lastUpdate = now;
     this.notifyListeners();
   }
 

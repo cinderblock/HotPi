@@ -68,48 +68,110 @@ section {
   margin-bottom: 2rem;
 }
 
-/* Connection Status */
-.status {
+/* Connection Chain */
+.connection-chain {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.5rem 1rem;
-  border-radius: 4px;
-  font-size: 0.9rem;
+  padding: 0.35rem 0.75rem;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
 }
 
-.status .indicator {
-  width: 10px;
-  height: 10px;
+.node-icon {
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-color);
+  transition:
+    transform 0.15s ease,
+    border-color 0.15s ease,
+    background 0.15s ease;
 }
 
-.status.connected {
+.node-icon svg {
+  width: 22px;
+  height: 22px;
+  fill: currentColor;
+}
+
+.node-icon.alive {
+  color: var(--success-color);
+  border-color: var(--success-color);
   background: rgba(76, 175, 80, 0.1);
-  border: 1px solid var(--success-color);
 }
 
-.status.connected .indicator {
+.node-icon.dead {
+  color: var(--error-color);
+  border-color: var(--error-color);
+  background: rgba(244, 67, 54, 0.08);
+}
+
+.link-indicator {
+  width: 42px;
+  height: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.link-line {
+  width: 100%;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--border-color);
+  transition:
+    background 0.15s ease,
+    box-shadow 0.2s ease;
+}
+
+.link-indicator.alive .link-line {
   background: var(--success-color);
-  animation: pulse 2s ease-in-out infinite;
+  box-shadow: 0 0 8px rgba(76, 175, 80, 0.6);
 }
 
-.status.disconnected {
-  background: rgba(244, 67, 54, 0.1);
-  border: 1px solid var(--error-color);
-}
-
-.status.disconnected .indicator {
+.link-indicator.dead .link-line {
   background: var(--error-color);
+  box-shadow: 0 0 6px rgba(244, 67, 54, 0.5);
 }
 
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
+.link-indicator.pulse .link-line {
+  animation: heartbeat-line 0.6s ease;
+}
+
+.node-icon.pulse {
+  animation: heartbeat-icon 0.6s ease;
+}
+
+@keyframes heartbeat-line {
+  0% {
+    transform: scaleX(1);
+    box-shadow: 0 0 8px rgba(76, 175, 80, 0.6);
   }
-  50% {
-    opacity: 0.5;
+  40% {
+    transform: scaleX(1.08);
+    box-shadow: 0 0 14px rgba(76, 175, 80, 0.8);
+  }
+  100% {
+    transform: scaleX(1);
+    box-shadow: 0 0 8px rgba(76, 175, 80, 0.6);
+  }
+}
+
+@keyframes heartbeat-icon {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(1.06);
+  }
+  100% {
+    transform: scale(1);
   }
 }
 

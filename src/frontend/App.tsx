@@ -34,9 +34,68 @@ function TimestampDisplay({ timestamp, offset }: { timestamp: number; offset?: n
   );
 }
 
+function LinkIndicator({ status, label }: { status: ConnectionStatus; label: string }) {
+  const now = useNow(200);
+  const secondsAgo = Math.max(0, (now - status.lastActivity) / 1000);
+  const isPulsing = status.connected && secondsAgo < 1.2;
+
+  return (
+    <div
+      className={`link-indicator ${status.connected ? 'alive' : 'dead'} ${isPulsing ? 'pulse' : ''}`}
+      title={`${label}: ${status.connected ? 'alive' : 'dead'} • last activity ${secondsAgo.toFixed(1)}s ago`}
+    >
+      <span className="link-line" />
+    </div>
+  );
+}
+
+function NodeIcon({
+  kind,
+  status,
+  label,
+}: {
+  kind: 'browser' | 'backend' | 'device';
+  status: ConnectionStatus;
+  label: string;
+}) {
+  const now = useNow(200);
+  const secondsAgo = Math.max(0, (now - status.lastActivity) / 1000);
+  const isPulsing = status.connected && secondsAgo < 1.2;
+
+  const iconPath =
+    kind === 'browser'
+      ? 'M4 6h16v12H4z M6 8v8h12V8z M9 18h6v1H9z'
+      : kind === 'backend'
+        ? 'M5 6h14v4H5z M5 11h14v4H5z M5 16h14v4H5z'
+        : 'M12 4c-3.3 0-6 2.7-6 6v6h12v-6c0-3.3-2.7-6-6-6zm0 3a3 3 0 0 1 3 3v1H9v-1a3 3 0 0 1 3-3zm-3 8v-2h6v2H9z';
+
+  return (
+    <div
+      className={`node-icon ${status.connected ? 'alive' : 'dead'} ${isPulsing ? 'pulse' : ''}`}
+      title={`${label}: ${status.connected ? 'connected' : 'disconnected'} • last activity ${secondsAgo.toFixed(1)}s ago`}
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d={iconPath} />
+      </svg>
+    </div>
+  );
+}
+
+function ConnectionChainView({ chain }: { chain: ConnectionChain }) {
+  return (
+    <div className="connection-chain">
+      <NodeIcon kind="browser" label="Browser" status={chain.websocket} />
+      <LinkIndicator label="Browser ↔ Backend (websocket)" status={chain.websocket} />
+      <NodeIcon kind="backend" label="Backend" status={chain.websocket} />
+      <LinkIndicator label="Backend ↔ Device (serial)" status={chain.serialPort} />
+      <NodeIcon kind="device" label="Device" status={chain.device} />
+    </div>
+  );
+}
+
 export default function App() {
   const [timeOffset, setTimeOffset] = useState<number>(); // Server time - Client time
-  const { isConnected, sendCommand } = useWebSocketConnection();
+  const { sendCommand } = useWebSocketConnection();
   const { data: state } = useDeviceState();
   const { data: messages = [] } = useSerialMessages();
 
@@ -63,20 +122,13 @@ export default function App() {
     <div>
       <header>
         <h1>Battery Controller</h1>
-        <div className={`status ${isConnected ? 'connected' : 'disconnected'}`}>
-          <span className="indicator"></span>
-          <span className="text">{isConnected ? 'Connected' : 'Disconnected'}</span>
-        </div>
+        {state.connectionChain && <ConnectionChainView chain={state.connectionChain} />}
       </header>
 
       <main>
         <section className="dashboard">
           <h2>Device Status</h2>
           <div className="state-grid">
-            <div className="state-item">
-              <span className="label">Connection:</span>
-              <span className="value">{state.connected ? 'Connected' : 'Disconnected'}</span>
-            </div>
             <div className="state-item">
               <span className="label">Last Update:</span>
               <span className="value">{new Date(state.lastUpdate).toLocaleTimeString()}</span>{' '}
