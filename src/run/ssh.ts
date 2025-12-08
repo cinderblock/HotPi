@@ -18,6 +18,14 @@ let sshConnection: Client | null = null;
 let connectingPromise: Promise<Client> | null = null;
 
 /**
+ * Check if an error is an abort error (expected when operations are cancelled)
+ */
+function isAbortError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return error.message === 'File write aborted' || error.message === 'SSH command aborted';
+}
+
+/**
  * Get or create SSH connection
  */
 function getSSHConnection(config: SSHConfig): Promise<Client> | Client {
@@ -68,6 +76,21 @@ function getSSHConnection(config: SSHConfig): Promise<Client> | Client {
   return connectingPromise;
 }
 
+function formatCommandFailure(cmd: string, code: number, stdout: string, stderr: string): string {
+  const sections: string[] = [`Remote command "${cmd}" exited with code ${code}.`];
+
+  const limit = (value: string) => {
+    const trimmed = value.trim();
+    if (trimmed.length <= 2000) return trimmed;
+    return `${trimmed.slice(0, 1997)}...`;
+  };
+
+  if (stderr.trim()) sections.push(`stderr:\n${limit(stderr)}`);
+  if (stdout.trim() && stdout.trim() !== stderr.trim()) sections.push(`stdout:\n${limit(stdout)}`);
+
+  return sections.join('\n\n');
+}
+
 /**
  * Close SSH connection
  */
@@ -94,7 +117,7 @@ async function doSFTP<T>(
 
   const s = await sftp;
 
-  // while (sftpLock) await sftpLock;
+  while (sftpLock) await sftpLock;
 
   signal?.throwIfAborted();
 
@@ -159,10 +182,24 @@ export async function sshExec(
 
         if (streamToTerminal) {
           ReadLine({ input: ch, crlfDelay: Infinity }).on('line', (line: string) => {
-            console.log(line);
+            // Skip empty lines
+            if (!line.trim()) return;
+
+            // Strip timestamp prefix from remote logger output (format: [HH:mm:ss] message)
+            const stripped = line.replace(/^\[\d{2}:\d{2}:\d{2}\]\s*/, '');
+            if (stripped.trim()) {
+              logger.info(`[remote] ${stripped}`);
+              stdout += `${stripped}\n`;
+            }
           });
           ReadLine({ input: ch.stderr, crlfDelay: Infinity }).on('line', (line: string) => {
-            console.error(line);
+            if (!line.trim()) return;
+
+            const stripped = line.replace(/^\[\d{2}:\d{2}:\d{2}\]\s*/, '');
+            if (stripped.trim()) {
+              logger.error(`[remote] ${stripped}`);
+              stderr += `${stripped}\n`;
+            }
           });
         } else {
           ch.on('data', (data: Buffer | string) => {
@@ -187,7 +224,7 @@ export async function sshExec(
         ch.on('close', (code: number) => {
           if (signal) signal.removeEventListener('abort', onAbort);
           if (code === 0) resolve(stdout);
-          else reject(new Error(`Command failed with code ${code}: ${stderr || stdout}`));
+          else reject(new Error(formatCommandFailure(cmd, code, stdout, stderr)));
         });
 
         ch.on('error', (error: Error) => {
@@ -223,45 +260,47 @@ export async function writeRemoteFile(
   signal?.throwIfAborted();
 
   const putOnce = async (): Promise<void> => {
-    const conn = await getSSHConnection(config);
-
-    const sftp: SFTPWrapper = await new Promise((resolve, reject) => {
-      conn.sftp((err, s) => (err ? reject(err) : resolve(s)));
-    });
-
     const readFile = useSudoMv ? await getTempFile(config) : remotePath;
 
-    await new Promise<void>((resolve, reject) => {
-      const writeStream = sftp.createWriteStream(readFile);
+    await doSFTP(
+      config,
+      async sftp => {
+        signal?.throwIfAborted();
 
-      const onAbort = () => {
-        try {
-          writeStream.destroy();
-        } catch {}
-        reject(new Error('File write aborted'));
-      };
+        return new Promise<void>((resolve, reject) => {
+          const writeStream = sftp.createWriteStream(readFile);
 
-      if (signal) {
-        if (signal.aborted) return onAbort();
-        signal.addEventListener('abort', onAbort, { once: true });
-      }
+          const onAbort = () => {
+            try {
+              writeStream.destroy();
+            } catch {}
+            reject(new Error('File write aborted'));
+          };
 
-      writeStream.on('error', (error: Error) => {
-        if (signal) signal.removeEventListener('abort', onAbort);
-        reject(error);
-      });
-      writeStream.on('close', () => {
-        if (signal) signal.removeEventListener('abort', onAbort);
-        resolve();
-      });
+          if (signal) {
+            if (signal.aborted) return onAbort();
+            signal.addEventListener('abort', onAbort, { once: true });
+          }
 
-      if (typeof content === 'string') {
-        writeStream.write(content, 'utf-8');
-      } else {
-        writeStream.write(content);
-      }
-      writeStream.end();
-    });
+          writeStream.on('error', (error: Error) => {
+            if (signal) signal.removeEventListener('abort', onAbort);
+            reject(error);
+          });
+          writeStream.on('close', () => {
+            if (signal) signal.removeEventListener('abort', onAbort);
+            resolve();
+          });
+
+          if (typeof content === 'string') {
+            writeStream.write(content, 'utf-8');
+          } else {
+            writeStream.write(content);
+          }
+          writeStream.end();
+        });
+      },
+      signal
+    );
 
     if (useSudoMv) await sshExec(config, 'sudo mv', [readFile, remotePath]);
   };
@@ -271,9 +310,14 @@ export async function writeRemoteFile(
     await putOnce();
     logger.debug(`✅ File ${remotePath} written`);
   } catch (_error) {
-    console.log(`Error writing file ${remotePath}: ${_error}`, '❌');
-    sshConnection = null;
-    await putOnce();
+    if (isAbortError(_error)) {
+      logger.debug(`Upload aborted for ${remotePath}`);
+      throw _error; // Re-throw abort errors so they propagate
+    } else {
+      logger.error(`❌ Error writing file ${remotePath}: ${_error}`);
+      sshConnection = null;
+      await putOnce();
+    }
   }
 }
 
