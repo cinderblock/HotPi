@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { ConnectionChain, ConnectionStatus } from './api-client.ts';
+import Tooltip from './components/Tooltip.tsx';
 import { useDeviceState, useSerialMessages } from './hooks/useDeviceData.ts';
 import { useWebSocketConnection } from './hooks/useWebSocket.ts';
 
@@ -34,18 +35,28 @@ function TimestampDisplay({ timestamp, offset }: { timestamp: number; offset?: n
   );
 }
 
+function TooltipContent({ label, status, secondsAgo }: { label: string; status: string; secondsAgo: number }) {
+  return (
+    <>
+      {label}: {status}
+      <br />
+      last activity {secondsAgo.toFixed(1)}s ago
+    </>
+  );
+}
+
 function LinkIndicator({ status, label }: { status: ConnectionStatus; label: string }) {
   const now = useNow(200);
   const secondsAgo = Math.max(0, (now - status.lastActivity) / 1000);
   const isPulsing = status.connected && secondsAgo < 1.2;
+  const content = <TooltipContent label={label} status={status.connected ? 'alive' : 'dead'} secondsAgo={secondsAgo} />;
 
   return (
-    <div
-      className={`link-indicator ${status.connected ? 'alive' : 'dead'} ${isPulsing ? 'pulse' : ''}`}
-      title={`${label}: ${status.connected ? 'alive' : 'dead'} • last activity ${secondsAgo.toFixed(1)}s ago`}
-    >
-      <span className="link-line" />
-    </div>
+    <Tooltip content={content} placement="bottom">
+      <div className={`link-indicator ${status.connected ? 'alive' : 'dead'} ${isPulsing ? 'pulse' : ''}`}>
+        <span className="link-line" />
+      </div>
+    </Tooltip>
   );
 }
 
@@ -61,6 +72,9 @@ function NodeIcon({
   const now = useNow(200);
   const secondsAgo = Math.max(0, (now - status.lastActivity) / 1000);
   const isPulsing = status.connected && secondsAgo < 1.2;
+  const content = (
+    <TooltipContent label={label} status={status.connected ? 'connected' : 'disconnected'} secondsAgo={secondsAgo} />
+  );
 
   const iconPath =
     kind === 'browser'
@@ -70,14 +84,13 @@ function NodeIcon({
         : 'M12 4c-3.3 0-6 2.7-6 6v6h12v-6c0-3.3-2.7-6-6-6zm0 3a3 3 0 0 1 3 3v1H9v-1a3 3 0 0 1 3-3zm-3 8v-2h6v2H9z';
 
   return (
-    <div
-      className={`node-icon ${status.connected ? 'alive' : 'dead'} ${isPulsing ? 'pulse' : ''}`}
-      title={`${label}: ${status.connected ? 'connected' : 'disconnected'} • last activity ${secondsAgo.toFixed(1)}s ago`}
-    >
-      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-        <path d={iconPath} />
-      </svg>
-    </div>
+    <Tooltip content={content} placement="bottom">
+      <div className={`node-icon ${status.connected ? 'alive' : 'dead'} ${isPulsing ? 'pulse' : ''}`}>
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d={iconPath} />
+        </svg>
+      </div>
+    </Tooltip>
   );
 }
 
@@ -121,7 +134,7 @@ export default function App() {
   return (
     <div>
       <header>
-        <h1>Battery Controller</h1>
+        <h1>Battery Charge & Discharge Controller</h1>
         {state.connectionChain && <ConnectionChainView chain={state.connectionChain} />}
       </header>
 
