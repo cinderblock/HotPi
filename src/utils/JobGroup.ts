@@ -1,4 +1,5 @@
-import { str } from './str';
+import { logger } from './logger.ts';
+import { str } from './str.ts';
 
 type Job = Promise<unknown>;
 
@@ -11,8 +12,8 @@ export default class JobGroup {
 
   add(job: Job, name?: string) {
     function errorHandler(error: unknown) {
-      console.error(str`Job failed${name && `: ${name}`}`);
-      console.error(error);
+      logger.error(str`Job failed${name && `: ${name}`}`);
+      logger.error(error);
     }
     const removeJob = () => this.jobs.delete(thisJob);
 

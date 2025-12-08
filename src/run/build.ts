@@ -13,7 +13,8 @@
 
 import { mkdir, readdir, rm } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
-import { shutdown } from '../utils/shutdown';
+import { logger } from '../utils/logger.ts';
+import { shutdown } from '../utils/shutdown.ts';
 
 export interface BuildOutput {
   filename: string;
@@ -38,7 +39,7 @@ export async function buildSetup(): Promise<string> {
   });
 
   if (!setupResult.success) {
-    console.error('Setup build errors:', setupResult.logs);
+    logger.error('Setup build errors:', setupResult.logs);
     throw new Error('Failed to build setup bundle');
   }
 
@@ -49,7 +50,7 @@ export async function buildSetup(): Promise<string> {
   }
 
   const setupContent = await setupResult.outputs[0].text();
-  console.log('✅ Setup bundle built');
+  logger.info('✅ Setup bundle built');
 
   return setupContent;
 }
@@ -87,10 +88,10 @@ export async function buildServer(): Promise<BuildOutput[]> {
     }
     const filename = basename(output.path);
     serverOutputs.push({ filename, content });
-    console.log(`  ✅ ${filename}`);
+    logger.info(`  ✅ ${filename}`);
   }
 
-  console.log(`✅ Server bundle built (${serverOutputs.length} file${serverOutputs.length !== 1 ? 's' : ''})`);
+  logger.info(`✅ Server bundle built (${serverOutputs.length} file${serverOutputs.length !== 1 ? 's' : ''})`);
 
   return serverOutputs;
 }

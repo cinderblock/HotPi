@@ -4,7 +4,7 @@
   "type": "module",
   "main": "server.js",
   "scripts": {
-    "start": "bun run src/run/deploy.ts",
+    "start": "bun --watch src/run/deploy.ts",
     "build": "bun run src/run/build.ts",
     "status": "bun run src/run/status.ts",
     "lint": "biome check --write .",
@@ -15,7 +15,8 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-use-websocket": "^4.13.0",
-    "ssh2": "^1.16.0"
+    "ssh2": "^1.16.0",
+    "winston": "^3.19.0"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.2.6",

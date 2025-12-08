@@ -11,9 +11,10 @@
  *   bun start --once            # Deploy once without watching
  */
 
-import { watch } from 'node:fs';
-import { shutdown } from '../utils/shutdown';
-import { type BuildOutput, build } from './build';
+import { join } from 'node:path';
+import { logger } from '../utils/logger.ts';
+import { shutdown } from '../utils/shutdown.ts';
+import { buildWatch } from './build.ts';
 import {
   DeployAppDir,
   DeployBunBin,
@@ -21,10 +22,11 @@ import {
   DeployHost,
   DeployKey,
   DeployPort,
+  DeployServiceName,
   DeploySetupHome,
   DeploySetupPath,
   DeployUser,
-} from './config';
+} from './config.ts';
 import {
   checkSSHConnection,
   closeSSHConnection,
@@ -33,7 +35,7 @@ import {
   sshExec,
   unlink,
   writeRemoteFile,
-} from './ssh';
+} from './ssh.ts';
 
 interface DeployConfig {
   sshConfig: SSHConfig;
@@ -51,25 +53,24 @@ async function loadConfig(): Promise<DeployConfig> {
 }
 
 function log(message: string, emoji = '📦') {
-  const timestamp = new Date().toLocaleTimeString();
-  console.log(`[${timestamp}] ${emoji} ${message}`);
+  logger.info(`${emoji} ${message}`);
 }
 
 async function ensureBunInstalled(config: DeployConfig, signal?: AbortSignal): Promise<void> {
-  log('Checking if Bun is installed on remote...', '🔍');
+  logger.debug('Checking if Bun is installed on remote...');
 
   try {
     const version = await sshExec(config.sshConfig, DeployBunBin, ['--version'], signal);
-    log(`Bun ${version.trim()} already installed`, '✅');
+    logger.debug(`Bun ${version.trim()} already installed`);
     return;
   } catch {
-    log('Bun not found, installing...', '📥');
+    logger.debug('Bun not found, installing...');
   }
 
   signal?.throwIfAborted();
 
   // Install Bun using official installer
-  log('Downloading and installing Bun...', '⬇️');
+  logger.debug('Downloading and installing Bun...');
   await sshExec(config.sshConfig, 'curl -fsSL https://bun.sh/install | bash', [], signal);
 
   signal?.throwIfAborted();
@@ -77,7 +78,7 @@ async function ensureBunInstalled(config: DeployConfig, signal?: AbortSignal): P
   // Verify installation
   try {
     const version = await sshExec(config.sshConfig, DeployBunBin, ['--version'], signal);
-    log(`Bun ${version.trim()} installed successfully`, '✅');
+    logger.debug(`Bun ${version.trim()} installed successfully`);
   } catch {
     throw new Error('Failed to install Bun on remote host');
   }
@@ -85,12 +86,12 @@ async function ensureBunInstalled(config: DeployConfig, signal?: AbortSignal): P
 
 async function deploySetupBundle(config: DeployConfig, setupBundle: string, signal?: AbortSignal): Promise<void> {
   signal?.throwIfAborted();
-  log('Transferring setup bundle to Pi...', '📤');
+  logger.debug('Transferring setup bundle to Pi...');
 
   // Write directly to home directory
   await writeRemoteFile(config.sshConfig, setupBundle, DeploySetupPath, false, signal);
 
-  log('Setup bundle deployed', '✅');
+  logger.debug('Setup bundle deployed');
 }
 
 async function runSetup(config: DeployConfig, signal?: AbortSignal): Promise<void> {
@@ -99,12 +100,10 @@ async function runSetup(config: DeployConfig, signal?: AbortSignal): Promise<voi
 
   // Setup script calls sudo internally for privileged operations
   await runBunOnRemote(config, [DeploySetupPath], DeploySetupHome, signal, true);
-
-  log('Setup completed', '✅');
 }
 
 async function deployPackageFiles(config: DeployConfig, signal?: AbortSignal): Promise<void> {
-  log('Transferring package files...', '📤');
+  logger.debug('Transferring package files...');
 
   // Read and transfer both files in parallel
   await Promise.all([
@@ -116,7 +115,7 @@ async function deployPackageFiles(config: DeployConfig, signal?: AbortSignal): P
       .then(content => writeRemoteFile(config.sshConfig, content, `${DeployAppDir}/bun.lock`, false, signal)),
   ]);
 
-  log('Package files deployed', '✅');
+  logger.debug('Package files deployed');
 }
 
 async function runBunOnRemote(
@@ -138,12 +137,12 @@ async function runBunOnRemote(
 
 async function installRemoteDependencies(config: DeployConfig, signal?: AbortSignal): Promise<void> {
   signal?.throwIfAborted();
-  log('Installing dependencies on remote...', '📦');
+  logger.debug('Installing dependencies on remote...');
 
   // Install production dependencies in app directory
   await runBunOnRemote(config, ['install', '--production'], DeployAppDir, signal, true);
 
-  log('Dependencies installed', '✅');
+  logger.debug('Dependencies installed');
 }
 
 async function deployServer(config: DeployConfig, outputs: BuildOutput[], signal?: AbortSignal): Promise<void> {
@@ -169,11 +168,11 @@ async function deployServer(config: DeployConfig, outputs: BuildOutput[], signal
   const extraFiles = sourceFiles.filter(file => !outputs.some(output => output.filename === file));
 
   if (extraFiles.length > 0) {
-    log(`Extra files: ${extraFiles.join(', ')}`, '⚠️');
+    logger.debug(`Cleaning up ${extraFiles.length} extra file${extraFiles.length !== 1 ? 's' : ''}...`);
     await Promise.all(extraFiles.map(file => unlink(config.sshConfig, `${DeployAppDir}/${file}`, signal)));
   }
 
-  log(`Server deployed (${outputs.length} file${outputs.length !== 1 ? 's' : ''})`, '✅');
+  log(`Files deployed (${localBuildFiles.length} file${localBuildFiles.length !== 1 ? 's' : ''})`, '✅');
 }
 
 async function restartService(config: DeployConfig, signal?: AbortSignal): Promise<void> {
@@ -203,12 +202,12 @@ async function checkStatus(
   serviceName = DeployDevServiceName
 ): Promise<void> {
   signal?.throwIfAborted();
-  log('Checking deployment status...', '📊');
+  logger.debug('Checking deployment status...');
 
   try {
     await sshExec(config.sshConfig, 'systemctl status', [serviceName], signal);
   } catch (_error) {
-    console.error('⚠️  Service may not be running properly');
+    logger.warn('⚠️  Service may not be running properly');
   }
 }
 
@@ -220,11 +219,11 @@ async function performDeploy(config: DeployConfig, isUpdate = false, signal?: Ab
 
   // Check SSH connection
   signal?.throwIfAborted();
-  log('Checking SSH connection...', '🔌');
+  logger.debug('Checking SSH connection...');
   if (!(await checkSSHConnection(config.sshConfig))) {
     throw new Error(`Cannot connect to ${config.sshConfig.user}@${config.sshConfig.host}`);
   }
-  log('SSH connection OK', '✅');
+  logger.debug('SSH connection OK');
 
   // Ensure Bun is installed on remote
   await ensureBunInstalled(config, signal);

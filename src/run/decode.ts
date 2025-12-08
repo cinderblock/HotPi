@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
 import { readFile, writeFile } from 'node:fs/promises';
+import { logger } from '../utils/logger.ts';
 
 type ParsedRow = {
   raw: string;
@@ -95,7 +96,7 @@ function bytesToHex(bytes: number[]): string {
 
 function warnChecksum(row: ParsedRow): void {
   if (row.checksumOk === false) {
-    console.warn(`checksum failed for ${row.type.toUpperCase()} line: ${row.raw}`);
+    logger.warn(`checksum failed for ${row.type.toUpperCase()} line: ${row.raw}`);
   }
 }
 
@@ -238,14 +239,14 @@ async function run(): Promise<void> {
   const onlyRx = argv.includes('--rx');
   const onlyTx = argv.includes('--tx');
   if (onlyRx && onlyTx) {
-    console.error('Use only one of --rx or --tx, not both');
+    logger.error('Use only one of --rx or --tx, not both');
     process.exit(1);
   }
   const args = argv.filter(a => a !== '--cols' && a !== '--rx' && a !== '--tx');
   const inPath = args[0];
   const outPath = args[1];
   if (!inPath) {
-    console.error('Usage: bun run src/run/decode.ts [--cols] [--rx|--tx] <input.csv> [output]');
+    logger.error('Usage: bun run src/run/decode.ts [--cols] [--rx|--tx] <input.csv> [output]');
     process.exit(1);
   }
 
@@ -351,14 +352,14 @@ async function run(): Promise<void> {
   const outText = output.join('\n');
   if (outPath) {
     await writeFile(outPath, outText, 'utf8');
-    console.log(`Wrote ${output.length - 1} rows to ${outPath}`);
+    logger.info(`Wrote ${output.length - 1} rows to ${outPath}`);
   } else {
     // Print only data rows, no extra logs
-    console.log(outText);
+    logger.info(outText);
   }
 }
 
 run().catch(err => {
-  console.error('decode failed:', err);
+  logger.error('decode failed:', err);
   process.exit(1);
 });

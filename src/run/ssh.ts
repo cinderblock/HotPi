@@ -5,6 +5,7 @@
 import { createInterface as ReadLine } from 'node:readline';
 import type { ClientChannel, ConnectConfig, FileEntryWithStats, SFTPWrapper } from 'ssh2';
 import { Client } from 'ssh2';
+import { logger } from '../utils/logger.ts';
 
 export interface SSHConfig {
   host: string;
@@ -122,7 +123,7 @@ export async function unlink(config: SSHConfig, file: string, signal?: AbortSign
     config,
     sftp => {
       signal?.throwIfAborted();
-      console.log(`Removing file ${file}`, '📤');
+      logger.debug(`📤 Removing file ${file}`);
       return new Promise((resolve, reject) => sftp.unlink(file, err => (err ? reject(err) : resolve())));
     },
     signal
@@ -142,7 +143,7 @@ export async function sshExec(
   signal?.throwIfAborted();
 
   const cmd = [command, ...params].join(' ');
-  console.log(`Executing command ${cmd} on remote...`, '📤');
+  logger.debug(`📤 Executing command ${cmd} on remote...`);
 
   const execOnce = async (): Promise<string> => {
     const conn = await getSSHConnection(config);
@@ -266,9 +267,9 @@ export async function writeRemoteFile(
   };
 
   try {
-    console.log(`Writing file ${remotePath}`, '📝');
+    logger.debug(`📝 Writing file ${remotePath}`);
     await putOnce();
-    console.log(`File ${remotePath} written`, '✅');
+    logger.debug(`✅ File ${remotePath} written`);
   } catch (_error) {
     console.log(`Error writing file ${remotePath}: ${_error}`, '❌');
     sshConnection = null;
@@ -284,8 +285,8 @@ export async function checkSSHConnection(config: SSHConfig): Promise<boolean> {
     await sshExec(config, 'echo', ['Connection successful']);
     return true;
   } catch (_error) {
-    console.log('SSH connection failed');
-    console.log(_error);
+    logger.error('SSH connection failed');
+    logger.error(_error);
     return false;
   }
 }

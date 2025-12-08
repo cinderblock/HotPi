@@ -7,9 +7,10 @@
 
 import type { ServerWebSocket } from 'bun';
 import homepage from '../frontend/index.html';
-import { shutdown } from '../utils/shutdown';
-import { SerialManager } from './serial';
-import { StateManager } from './state';
+import { logger } from '../utils/logger.ts';
+import { shutdown } from '../utils/shutdown.ts';
+import { SerialManager } from './serial.ts';
+import { StateManager } from './state.ts';
 
 const Port = Number(process.env.PORT) || 80;
 
@@ -34,7 +35,7 @@ async function main() {
         .toUpperCase()
         .match(/.{1,2}/g)
         ?.join(' ') || '';
-    console.log('📥 Received packet:', hex);
+    logger.info('📥 Received pack:', hex);
 
     // Add to message history
     stateManager.addMessage('in', hex);
@@ -76,7 +77,7 @@ async function main() {
           console.log('📨 Received WebSocket message:', JSON.stringify(data, null, 2));
 
           if (data.type === 'command') {
-            console.log('📨 Received command:', data.data.command);
+            logger.info('📨 Received command:', data.data.command);
 
             if (data.data.command === 'start') {
               await serialManager.sendConnectCommand();
@@ -87,7 +88,7 @@ async function main() {
             }
           }
         } catch (error) {
-          console.error('❌ Failed to process WebSocket message:', error);
+          logger.error('❌ Failed to process WebSocket message:', error);
         }
       },
     },
@@ -151,6 +152,6 @@ async function main() {
 }
 
 main().catch(error => {
-  console.error('❌ Failed to start server:', error);
+  logger.error('❌ Failed to start server:', error);
   shutdown(1);
 });

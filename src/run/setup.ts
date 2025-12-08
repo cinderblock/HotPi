@@ -18,13 +18,14 @@
 
 import { spawn, spawnSync } from 'node:child_process';
 import { readFile, writeFile as writeFileFS } from 'node:fs/promises';
-import { shutdown } from '../utils/shutdown';
-import { DeployAppDir, DeployBunBin, DeployDevServiceName, DeployServiceName } from './config';
+import { logger } from '../utils/logger.ts';
+import { shutdown } from '../utils/shutdown.ts';
+import { DeployAppDir, DeployBunBin, DeployDevServiceName, DeployServiceName } from './config.ts';
 
 export const SystemdServiceDir = '/etc/systemd/system';
 
 function log(message: string, emoji = 'ℹ️') {
-  console.log(`${emoji} ${message}`);
+  logger.info(`${emoji} ${message}`);
 }
 
 /**
@@ -79,7 +80,7 @@ async function installDependencies() {
   }
 
   writeFile(updateTimestampPath, new Date().toISOString()).catch(error => {
-    console.error('Failed to write update timestamp:', error);
+    logger.error('Failed to write update timestamp:', error);
   });
 
   log('Installing system dependencies...', '📦');
@@ -270,25 +271,16 @@ async function setupSystemdServices() {
 }
 
 function displaySummary() {
-  console.log(`\n${'='.repeat(60)}`);
   log('Setup Complete!', '🎉');
-  console.log('='.repeat(60));
-  console.log('\nConfiguration:');
-  console.log(`  📁 Application directory: ${DeployAppDir}`);
-  console.log(`  🏃 Bun runtime: ${DeployBunBin}`);
-  console.log(`  📦 Main entry: ${DeployAppDir} (package.json main field)`);
-  console.log(`  ⚙️  Production service: ${serviceFileName(false)}`);
-  console.log(`  ⚙️  Dev service: ${serviceFileName(true)}`);
-  console.log('\nNext:');
-  console.log('  1. Deploy server bundle to continue');
-  console.log('  2. Production service will auto-start on deployment');
-  console.log('  3. Dev service used for watch mode deployments');
-  console.log('');
+  logger.debug(`  📁 Application directory: ${DeployAppDir}`);
+  logger.debug(`  🏃 Bun runtime: ${DeployBunBin}`);
+  logger.debug(`  📦 Main entry: ${DeployAppDir}`);
+  logger.debug(`  ⚙️  Production service: ${serviceFileName(false)}`);
+  logger.debug(`  ⚙️  Dev service: ${serviceFileName(true)}`);
 }
 
 async function main() {
-  console.log('🚀 Battery Controller - Raspberry Pi Setup');
-  console.log('==========================================\n');
+  log('Battery Controller - Raspberry Pi Setup', '🚀');
 
   const jobs = [];
 
@@ -311,6 +303,6 @@ async function main() {
 }
 
 main().catch(error => {
-  console.error('\n❌ Setup failed:', error);
+  logger.error('❌ Setup failed:', error);
   shutdown(1);
 });

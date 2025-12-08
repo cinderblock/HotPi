@@ -40,6 +40,7 @@
 import { spawn } from 'node:child_process';
 import type { FileHandle } from 'node:fs/promises';
 import { open } from 'node:fs/promises';
+import { logger } from '../utils/logger.ts';
 
 // Protocol constants
 const StartToken = 0xfa;
@@ -59,7 +60,7 @@ export class SerialManager {
   ) {}
 
   async connect() {
-    console.log(`📟 Connecting to serial port: ${this.portPath} @ ${this.baudRate} baud`);
+    logger.info(`📟 Connecting to serial port: ${this.portPath} @ ${this.baudRate} baud`);
 
     try {
       // Configure serial port using stty
@@ -68,17 +69,17 @@ export class SerialManager {
       // Open the serial device file for reading and writing
       this.fileHandle = await open(this.portPath, 'r+');
 
-      console.log('✅ Serial port connected');
+      logger.info('✅ Serial port connected');
 
       for (const listener of this.connectionListener) listener(true);
 
       // Start reading from serial port
       this.doReading().catch(error => {
-        console.error('❌ Error reading from serial port:', error);
+        logger.error('❌ Error reading from serial port:', error);
         this.disconnect();
       });
     } catch (error) {
-      console.error('❌ Failed to connect to serial port:', error);
+      logger.error('❌ Failed to connect to serial port:', error);
       throw error;
     }
   }
@@ -90,7 +91,7 @@ export class SerialManager {
     this.fileHandle = null;
     await handle.close();
 
-    console.log('📴 Serial port disconnected');
+    logger.info('📴 Serial port disconnected');
 
     for (const listener of this.connectionListener) listener(false);
   }
@@ -118,7 +119,7 @@ export class SerialManager {
 
       // Should not be possible, but just in case
       if (bytesRead === 0) {
-        console.error('❌ No data available from serial port');
+        logger.error('❌ No data available from serial port');
         continue;
       }
 
@@ -191,12 +192,12 @@ export class SerialManager {
       ];
 
       const argsString = args.join(' ');
-      console.log(`🔧 Running stty ${argsString}`);
+      logger.info(`🔧 Running stty ${argsString}`);
       const stty = spawn('stty', args);
 
       stty.on('close', code => {
         if (code === 0) {
-          console.log(`✅ Serial port configured: ${this.baudRate} baud, 8E1 mode`);
+          logger.info(`✅ Serial port configured: ${this.baudRate} baud, 8E1 mode`);
           resolve();
         } else {
           reject(new Error(`stty exited with code ${code}`));
@@ -223,7 +224,7 @@ export class SerialManager {
     const sendBuffer = Buffer.from([StartToken, ...data, checksum(data), EndToken]);
 
     await this.fileHandle.write(sendBuffer);
-    console.log('📤 Sent packet:', sendBuffer.toString('hex'));
+    logger.info('📤 Sent packet:', sendBuffer.toString('hex'));
   }
 
   /**
@@ -245,32 +246,32 @@ export class SerialManager {
   }
 
   async sendStopCommand(): Promise<void> {
-    console.log('📤 Sending START command...');
+    logger.info('📤 Sending START command...');
     await this.sendPacket(Buffer.from([0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]));
   }
 
   async sendStartD_CC(params: unknown): Promise<void> {
-    console.log('📤 Sending START command...');
+    logger.info('📤 Sending START command...');
     await this.sendPacket(Buffer.from([0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]));
   }
 
   async sendAdjustD_CC(params: unknown): Promise<void> {
-    console.log('📤 Sending ADJUST command...');
+    logger.info('📤 Sending ADJUST command...');
     await this.sendPacket(Buffer.from([0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]));
   }
 
   async sendContinueD_CC(params: unknown): Promise<void> {
-    console.log('📤 Sending CONTINUE command...');
+    logger.info('📤 Sending CONTINUE command...');
     await this.sendPacket(Buffer.from([0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]));
   }
 
   async sendStartD_CP(params: unknown): Promise<void> {
-    console.log('📤 Sending STOP command...');
+    logger.info('📤 Sending STOP command...');
     await this.sendPacket(Buffer.from([0x11, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]));
   }
 
   async sendContinueD_CP(params: unknown): Promise<void> {
-    console.log('📤 Sending STOP command...');
+    logger.info('📤 Sending STOP command...');
     await this.sendPacket(Buffer.from([0x18, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]));
   }
   // Variants with command codes 21/28, 31/38, 41/48, 51/58, 61/68, 71/78	Start
