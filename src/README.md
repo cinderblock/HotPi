@@ -1,6 +1,6 @@
 # Source Code
 
-All source code for the Battery Controller project.
+All source code for the Battery Charge & Discharge Controller project.
 
 - **`server/`** - Backend server (HTTP, WebSocket, serial communication)
 - **`frontend/`** - Web frontend (UI, WebSocket client)

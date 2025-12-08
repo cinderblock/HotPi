@@ -27,7 +27,7 @@ function log(message: string, emoji = 'ℹ️') {
 }
 
 async function checkRemoteStatus(config: SSHConfig) {
-  logger.info('📊 Battery Controller - Remote Status');
+  logger.info('📊 Battery Charge & Discharge Controller - Remote Status');
   logger.info('======================================\n');
   logger.info(`Target: ${config.user}@${config.host}\n`);
 

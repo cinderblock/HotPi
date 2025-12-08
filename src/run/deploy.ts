@@ -463,7 +463,7 @@ async function main() {
   const onceMode = process.argv.includes('--once');
   const buildDir = 'build';
 
-  log('Battery Controller - Development Deployment', '🔧');
+  log('Battery Charge & Discharge Controller - Development Deployment', '🔧');
   logger.debug(`📡 Target: ${config.sshConfig.user}@${config.sshConfig.host}`);
   logger.debug(`📂 App Dir: ${DeployAppDir}`);
   logger.debug(`📁 Build Dir: ${buildDir}`);

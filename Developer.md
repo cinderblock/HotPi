@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Battery Controller is a real-time device monitoring application that:
+Battery Charge & Discharge Controller is a real-time device monitoring application that:
 
 - Communicates with hardware over serial port
 - Maintains synchronized state between physical device and application
@@ -426,7 +426,7 @@ The application runs as a systemd service `battery-controller.service` on Raspbe
 
 ```ini
 [Unit]
-Description=Battery Controller
+Description=Battery Charge & Discharge Controller
 After=network.target
 
 [Service]

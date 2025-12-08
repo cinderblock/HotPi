@@ -18,7 +18,7 @@ const Port = Number(process.env.PORT) || 80;
 const wsClients = new Set<ServerWebSocket>();
 
 async function main() {
-  logger.info('🚀 Starting Battery Controller Server...');
+  logger.info('🚀 Starting Battery Charge & Discharge Controller Server...');
 
   // Heartbeat watchdog timer
   let heartbeatWatchdog: Timer | null = null;

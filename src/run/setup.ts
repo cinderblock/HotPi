@@ -200,7 +200,7 @@ function serviceFileName(dev = false) {
 
 function serviceContent(dev = false) {
   return `[Unit]
-Description=Battery Controller Service${dev ? ' (Development)' : ''}
+Description=Battery Charge & Discharge Controller Service${dev ? ' (Development)' : ''}
 After=network.target
 Conflicts=${serviceName(!dev)}
 
@@ -280,7 +280,7 @@ function displaySummary() {
 }
 
 async function main() {
-  log('Battery Controller - Raspberry Pi Setup', '🚀');
+  log('Battery Charge & Discharge Controller - Raspberry Pi Setup', '🚀');
 
   const jobs = [];
 

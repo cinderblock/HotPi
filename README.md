@@ -1,4 +1,4 @@
-# Battery Controller
+# Battery Charge & Discharge Controller
 
 A real-time device monitoring and control application that interfaces with hardware over serial port, providing a web-based GUI for interaction and control.
 
