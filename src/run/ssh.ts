@@ -2,6 +2,7 @@
  * Utility functions for deployment scripts
  */
 
+import { posix as pathPosix } from 'node:path';
 import { createInterface as ReadLine } from 'node:readline';
 import type { ClientChannel, ConnectConfig, FileEntryWithStats, SFTPWrapper } from 'ssh2';
 import { Client } from 'ssh2';
@@ -318,6 +319,136 @@ export async function writeRemoteFile(
       sshConnection = null;
       await putOnce();
     }
+  }
+}
+
+export interface StagedRemoteFile {
+  remotePath: string;
+  content: string | Uint8Array;
+}
+
+function buildTempPath(remotePath: string): string {
+  const dirName = pathPosix.dirname(remotePath || '/tmp');
+  const baseName = pathPosix.basename(remotePath || 'file');
+  const safeBase = baseName.replace(/[^A-Za-z0-9._-]/g, '_');
+  const unique = Math.random().toString(16).slice(2);
+  const dir = dirName && dirName !== '.' ? dirName : '/tmp';
+  return `${dir}/.tmp-upload-${unique}-${safeBase || 'file'}`;
+}
+
+/**
+ * Write multiple files to temporary paths via SFTP, then rename each to its final
+ * destination only after all uploads complete. Uses SFTP rename (no shell mv).
+ */
+export async function writeRemoteFilesStaged(
+  config: SSHConfig,
+  files: StagedRemoteFile[],
+  signal?: AbortSignal
+): Promise<void> {
+  if (!files.length) return;
+
+  signal?.throwIfAborted();
+  const staged: { tempPath: string; remotePath: string }[] = [];
+
+  const writeToTemp = async (file: StagedRemoteFile): Promise<string> => {
+    const tempPath = buildTempPath(file.remotePath);
+
+    await doSFTP(
+      config,
+      sftp => {
+        signal?.throwIfAborted();
+
+        return new Promise<void>((resolve, reject) => {
+          const writeStream = sftp.createWriteStream(tempPath);
+
+          const onAbort = () => {
+            try {
+              writeStream.destroy();
+            } catch {}
+            reject(new Error('File write aborted'));
+          };
+
+          if (signal) {
+            if (signal.aborted) return onAbort();
+            signal.addEventListener('abort', onAbort, { once: true });
+          }
+
+          writeStream.on('error', (error: Error) => {
+            if (signal) signal.removeEventListener('abort', onAbort);
+            reject(error);
+          });
+          writeStream.on('close', () => {
+            if (signal) signal.removeEventListener('abort', onAbort);
+            resolve();
+          });
+
+          if (typeof file.content === 'string') {
+            writeStream.write(file.content, 'utf-8');
+          } else {
+            writeStream.write(file.content);
+          }
+          writeStream.end();
+        });
+      },
+      signal
+    );
+
+    return tempPath;
+  };
+
+  try {
+    // Upload all files to temporary locations first
+    for (const file of files) {
+      signal?.throwIfAborted();
+      const tempPath = await writeToTemp(file);
+      staged.push({ tempPath, remotePath: file.remotePath });
+      logger.debug(`📝 Staged ${file.remotePath} -> ${tempPath}`);
+    }
+  } catch (error) {
+    if (isAbortError(error)) {
+      logger.debug('Batch upload aborted before rename');
+      throw error;
+    }
+    logger.error(`❌ Error staging files: ${error}`);
+    throw error;
+  }
+
+  // After all uploads succeed, rename each staged file into place
+  for (const { tempPath, remotePath } of staged) {
+    signal?.throwIfAborted();
+    await doSFTP(
+      config,
+      sftp => {
+        signal?.throwIfAborted();
+
+        return new Promise<void>((resolve, reject) => {
+          const onAbort = () => {
+            reject(new Error('File write aborted'));
+          };
+
+          if (signal) {
+            if (signal.aborted) return onAbort();
+            signal.addEventListener('abort', onAbort, { once: true });
+          }
+
+          const doRename = () =>
+            sftp.rename(tempPath, remotePath, err => {
+              if (signal) signal.removeEventListener('abort', onAbort);
+              if (err) return reject(err);
+              resolve();
+            });
+
+          // Best-effort delete existing file to avoid servers that reject overwrite
+          sftp.unlink(remotePath, () => {
+            // Ignore unlink errors (file may not exist)
+            doRename();
+          });
+        });
+      },
+      signal
+    );
+
+    logger.debug(`✅ Renamed ${tempPath} -> ${remotePath}`);
   }
 }
 

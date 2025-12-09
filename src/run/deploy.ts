@@ -32,9 +32,10 @@ import {
   closeSSHConnection,
   readdir,
   type SSHConfig,
+  type StagedRemoteFile,
   sshExec,
   unlink,
-  writeRemoteFile,
+  writeRemoteFilesStaged,
 } from './ssh.ts';
 
 interface DeployConfig {
@@ -96,8 +97,7 @@ async function deploySetupBundle(config: DeployConfig, setupBundle: string, sign
   signal?.throwIfAborted();
   logger.debug('Transferring setup bundle to Pi...');
 
-  // Write directly to home directory
-  await writeRemoteFile(config.sshConfig, setupBundle, DeploySetupPath, false, signal);
+  await writeRemoteFilesStaged(config.sshConfig, [{ content: setupBundle, remotePath: DeploySetupPath }], signal);
 
   logger.debug('Setup bundle deployed');
 }
@@ -115,7 +115,7 @@ async function deployPackageFiles(config: DeployConfig, signal?: AbortSignal): P
 
   // Read and transfer server package.json
   const content = await Bun.file('src/server/package.json').text();
-  await writeRemoteFile(config.sshConfig, content, `${DeployAppDir}/package.json`, false, signal);
+  await writeRemoteFilesStaged(config.sshConfig, [{ content, remotePath: `${DeployAppDir}/package.json` }], signal);
 
   logger.debug('Package files deployed');
 }
@@ -177,11 +177,16 @@ async function deployBuildFiles(
 
   // Upload files sequentially to avoid SSH channel exhaustion
   // Assets first, then source files
+  const stagedFiles: StagedRemoteFile[] = [];
   for (const filename of sortedFiles) {
     const localPath = join(buildDir, filename);
     const content = await Bun.file(localPath).text();
-    await writeRemoteFile(config.sshConfig, content, `${DeployAppDir}/${filename}`, false, signal);
-    logger.debug(`  ✅ ${filename}`);
+    stagedFiles.push({ content, remotePath: `${DeployAppDir}/${filename}` });
+  }
+
+  await writeRemoteFilesStaged(config.sshConfig, stagedFiles, signal);
+  for (const file of stagedFiles) {
+    logger.debug(`  ✅ ${file.remotePath.replace(`${DeployAppDir}/`, '')}`);
   }
 
   // Clean up old files last if requested
