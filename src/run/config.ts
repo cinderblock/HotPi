@@ -17,6 +17,3 @@ export const DeployBunBin = `${DeploySetupHome}/.bun/bin/bun`; // Path to Bun bi
 // Remote systemd service configuration
 export const DeployServiceName = 'battery-controller';
 export const DeployDevServiceName = 'battery-controller-dev';
-
-// Remote server file name
-export const SERVER_BUNDLE_FILENAME = 'server.js';
