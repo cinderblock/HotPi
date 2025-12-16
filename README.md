@@ -91,6 +91,85 @@ See [Developer.md](./Developer.md) for detailed deployment documentation.
 - **Server**: Backend API that manages state and serial port communication
 - **Run Scripts**: Deployment and management utilities for Raspberry Pi
 
+#### Run Scripts Architecture
+
+The following diagram shows how the run scripts interact with each other:
+
+```mermaid
+graph TD
+    subgraph Run Scripts
+        bunBuild{{bun run build}} ---> buildTs
+        bunStart{{bun start}} ---> deployTs
+        bunStatus{{bun run status}} ---> statusTs
+    end
+
+    deployTs[deploy.ts<br/>Main Deployment]
+    setupTs[setup.ts<br/>Runs on Pi]
+    statusTs[status.ts<br/>Status Check]
+
+    sshTs(ssh.ts<br/>SSH Utilities)
+    configTs(config.ts<br/>Shared Config)
+
+    subgraph Build System
+      buildTs[build.ts<br/>Build System]
+      buildSetupFn[(buildSetup)]
+      buildServerFn[(buildServer)]
+      buildFn[(build)]
+      buildToDiskFn[(buildToDisk)]
+      buildWatchFn[(buildWatch)]
+    end
+
+    deployTs --> sshTs
+    deployTs --SSH Execute--> setupTs
+    statusTs --> sshTs
+    configTs --> statusTs
+    configTs --> deployTs
+    configTs --> setupTs
+
+    deployTs --Calls--> buildToDiskFn
+    deployTs --Calls--> buildWatchFn
+
+    buildWatchFn --Calls--> buildToDiskFn
+    buildToDiskFn --Calls--> buildFn
+    buildFn --Calls--> buildSetupFn
+    buildFn --Calls--> buildServerFn
+
+    %% build.ts CLI entrypoint uses these build functions
+    buildTs --CLI main--> buildWatchFn
+    buildTs --CLI main--> buildToDiskFn
+
+    %% buildSetup builds the setup bundle that contains setup.ts
+    buildSetupFn -.builds.-> setupTs
+
+    classDef script fill:#e1f5ff;
+    classDef buildScript fill:#fff4e1;
+    classDef setupScript fill:#fce4ec;
+    classDef util fill:#f0f0f0;
+    classDef config fill:#e8f5e9;
+    classDef buildFnClass fill:#f3e5f5;
+    classDef cli fill:#fff9c4;
+
+    class deployTs,statusTs script;
+    class buildTs buildScript;
+    class setupTs setupScript;
+    class sshTs util;
+    class configTs config;
+    class buildSetupFn,buildServerFn,buildFn,buildToDiskFn,buildWatchFn buildFnClass;
+    class bunStart,bunBuild,bunStatus cli;
+
+    style bunStart font-weight: bold ;
+    style bunStart fill:#d0f8ce;
+```
+
+**Script Relationships:**
+
+- **deploy.ts**: Main deployment orchestrator that builds the project, transfers files via SSH, and runs setup on the remote Pi
+- **build.ts**: Build system that can be used programmatically or as CLI; exports functions for building setup and server bundles
+- **ssh.ts**: SSH utility functions for file transfer and remote command execution
+- **config.ts**: Shared configuration constants used by deployment and setup scripts
+- **setup.ts**: Runs on the Raspberry Pi to configure system directories, services, and hardware
+- **status.ts**: Checks remote Pi status via SSH
+
 ### Features
 
 - Real-time serial port communication with connected hardware
