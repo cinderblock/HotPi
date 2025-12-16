@@ -52,6 +52,13 @@ async function sudoExec(command: string, args: string[] = [], stream = false): P
   return exec('sudo', [command, ...args], stream);
 }
 
+async function sudoExecCapture(
+  command: string,
+  args: string[] = [],
+): Promise<{ success: boolean; stdout: string; stderr: string }> {
+  return execCaptureAsync('sudo', [command, ...args]);
+}
+
 /**
  * Run a command locally and capture the output
  */
@@ -61,6 +68,44 @@ async function execCapture(command: string, args: string[] = []): Promise<string
     // shell: true,
   });
   return result.stdout.toString();
+}
+
+/**
+ * Run a command asynchronously and capture both stdout and stderr
+ * @param command
+ * @param args
+ * @returns Object with success status and captured output
+ */
+async function execCaptureAsync(
+  command: string,
+  args: string[] = [],
+): Promise<{ success: boolean; stdout: string; stderr: string }> {
+  const cp = spawn(command, args, {
+    stdio: 'pipe',
+    // shell: true,
+  });
+
+  let stdout = '';
+  let stderr = '';
+
+  cp.stdout?.on('data', (data: Buffer) => {
+    stdout += data.toString();
+  });
+
+  cp.stderr?.on('data', (data: Buffer) => {
+    stderr += data.toString();
+  });
+
+  const status = await new Promise<number>((resolve, reject) => {
+    cp.on('close', resolve);
+    cp.on('error', reject);
+  });
+
+  return {
+    success: status === 0,
+    stdout: stdout.trim(),
+    stderr: stderr.trim(),
+  };
 }
 
 async function installDependencies() {
@@ -86,11 +131,27 @@ async function installDependencies() {
   log('Installing system dependencies...', '📦');
 
   // Update package list
-  if (!(await sudoExec('apt-get', ['update', '-qq']))) {
+  const updateResult = await sudoExecCapture('apt-get', ['update', '-qq']);
+  if (!updateResult.success) {
+    logger.error('apt-get update failed');
+    if (updateResult.stdout) {
+      logger.error('stdout:', updateResult.stdout);
+    }
+    if (updateResult.stderr) {
+      logger.error('stderr:', updateResult.stderr);
+    }
     throw new Error('Failed to update package list');
   }
 
-  if (!(await sudoExec('apt-get', ['upgrade', '-y', '-qq']))) {
+  const upgradeResult = await sudoExecCapture('apt-get', ['upgrade', '-y', '-qq']);
+  if (!upgradeResult.success) {
+    logger.error('apt-get upgrade failed');
+    if (upgradeResult.stdout) {
+      logger.error('stdout:', upgradeResult.stdout);
+    }
+    if (upgradeResult.stderr) {
+      logger.error('stderr:', upgradeResult.stderr);
+    }
     throw new Error('Failed to upgrade packages');
   }
 
@@ -104,7 +165,15 @@ async function installDependencies() {
 
   log(`Installing: ${packages.join(', ')}`);
 
-  if (!(await sudoExec('apt-get', ['install', '-y', '-qq', ...packages]))) {
+  const installResult = await sudoExecCapture('apt-get', ['install', '-y', '-qq', ...packages]);
+  if (!installResult.success) {
+    logger.error('apt-get install failed');
+    if (installResult.stdout) {
+      logger.error('stdout:', installResult.stdout);
+    }
+    if (installResult.stderr) {
+      logger.error('stderr:', installResult.stderr);
+    }
     throw new Error('Failed to install dependencies');
   }
 
