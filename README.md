@@ -31,7 +31,7 @@ For more installation options, visit [bun.sh](https://bun.sh)
 
 ```bash
 # Clone the repository
-git clone https://github.com/twilltech/battery-controller.git
+git clone https://github.com/cinderblock/battery-controller.git
 cd battery-controller
 
 # Install dependencies
