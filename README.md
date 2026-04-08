@@ -98,38 +98,39 @@ The following diagram shows how the run scripts interact with each other:
 ```mermaid
 graph TD
     subgraph Run Scripts
-        bunBuild{{bun run build}} ---> buildTs
-        bunStart{{bun start}} ---> deployTs
-        bunStatus{{bun run status}} ---> statusTs
+        bunBuild{{bun run build}} --> buildTs
+        bunStart{{bun start}} --> deployTs
+        bunStatus{{bun run status}} --> statusTs
     end
 
-    deployTs[deploy.ts<br/>Main Deployment]
-    setupTs[setup.ts<br/>Runs on Pi]
-    statusTs[status.ts<br/>Status Check]
+    deployTs[<a href="src/run/deploy.ts">deploy.ts</a><br/>Main Deployment]
+    setupTs[<a href="src/run/setup.ts">setup.ts</a><br/>Runs on Pi]
+    statusTs[<a href="src/run/status.ts">status.ts</a><br/>Status Check]
 
-    sshTs(ssh.ts<br/>SSH Utilities)
-    configTs(config.ts<br/>Shared Config)
+    sshTs[<a href="src/run/ssh.ts">ssh.ts</a><br/>SSH Utilities]
+    configTs[<a href="src/run/config.ts">config.ts</a><br/>Shared Config]
 
     subgraph Build System
-      buildTs[build.ts<br/>Build System]
+      buildTs[<a href="src/run/build.ts">build.ts</a><br/>Build System]
       buildSetupFn[(buildSetup)]
       buildServerFn[(buildServer)]
       buildFn[(build)]
       buildToDiskFn[(buildToDisk)]
       buildWatchFn[(buildWatch)]
+      buildWatchInMemoryFn[(buildWatchInMemory)]
     end
 
     deployTs --> sshTs
-    deployTs --SSH Execute--> setupTs
+    deployTs -.Execute built version on remote Pi via SSH.-> setupTs
     statusTs --> sshTs
     configTs --> statusTs
     configTs --> deployTs
     configTs --> setupTs
 
-    deployTs --Calls--> buildToDiskFn
-    deployTs --Calls--> buildWatchFn
+    deployTs --Calls--> buildWatchInMemoryFn
 
     buildWatchFn --Calls--> buildToDiskFn
+    buildWatchInMemoryFn --Calls--> buildFn
     buildToDiskFn --Calls--> buildFn
     buildFn --Calls--> buildSetupFn
     buildFn --Calls--> buildServerFn
@@ -139,7 +140,7 @@ graph TD
     buildTs --CLI main--> buildToDiskFn
 
     %% buildSetup builds the setup bundle that contains setup.ts
-    buildSetupFn -.builds.-> setupTs
+    buildSetupFn --builds--> setupTs
 
     classDef script fill:#e1f5ff;
     classDef buildScript fill:#fff4e1;
@@ -154,7 +155,7 @@ graph TD
     class setupTs setupScript;
     class sshTs util;
     class configTs config;
-    class buildSetupFn,buildServerFn,buildFn,buildToDiskFn,buildWatchFn buildFnClass;
+    class buildSetupFn,buildServerFn,buildFn,buildToDiskFn,buildWatchFn,buildWatchInMemoryFn buildFnClass;
     class bunStart,bunBuild,bunStatus cli;
 
     style bunStart font-weight: bold ;

@@ -337,6 +337,110 @@ export async function buildWatch(
   };
 }
 
+/**
+ * Watch mode (in-memory): Build bundles in memory when source files change.
+ * Returns a cleanup function to stop watching.
+ */
+export async function buildWatchInMemory(
+  onBuild?: (result: BuildResult, options: BuildOptions, changedFiles: Set<string>) => void,
+  skipInitialBuild = false
+): Promise<() => void> {
+  let isBuilding = false;
+  let buildTimeout: NodeJS.Timeout | null = null;
+  const changedFiles = new Set<string>();
+
+  const determineBuildOptions = (files: Set<string>): BuildOptions => {
+    let needsSetup = false;
+    let needsServer = false;
+
+    for (const file of files) {
+      const normalized = file.replace(/\\/g, '/');
+
+      if (normalized.match(/^run\/.*\.ts$/)) {
+        needsSetup = true;
+      }
+
+      if (normalized.match(/^server\/.*\.ts$/) || normalized.match(/^frontend\/.*\.(tsx?|css|html)$/)) {
+        needsServer = true;
+      }
+
+      if (normalized.match(/^utils\/.*\.ts$/)) {
+        // Shared dependencies - rebuild both
+        needsSetup = true;
+        needsServer = true;
+      }
+    }
+
+    return { setup: needsSetup, server: needsServer };
+  };
+
+  const performBuild = async (options: BuildOptions, changed: Set<string>) => {
+    if (isBuilding) {
+      return;
+    }
+    isBuilding = true;
+
+    try {
+      const result = await build(options);
+      if (onBuild) {
+        onBuild(result, options, changed);
+      }
+    } catch (error) {
+      logger.error('❌ Build failed:', error);
+    } finally {
+      isBuilding = false;
+    }
+  };
+
+  // Initial build (unless skipped)
+  if (!skipInitialBuild) {
+    await performBuild({ setup: true, server: true }, new Set());
+  }
+  logger.debug('👀 Watching for changes (in-memory)...');
+
+  // Watch for changes
+  const watcher = watch('src', { recursive: true, persistent: true }, (_eventType, filename) => {
+    if (!filename) return;
+
+    const normalizedFilename = filename.replace(/\\/g, '/');
+
+    // Only watch relevant source files
+    if (
+      normalizedFilename.match(/^server\/.*\.ts$/) ||
+      normalizedFilename.match(/^frontend\/.*\.(tsx?|css|html)$/) ||
+      normalizedFilename.match(/^run\/.*\.ts$/) ||
+      normalizedFilename.match(/^utils\/.*\.ts$/)
+    ) {
+      // Track changed files
+      changedFiles.add(normalizedFilename);
+
+      // Debounce builds
+      if (buildTimeout) {
+        clearTimeout(buildTimeout);
+      }
+      buildTimeout = setTimeout(() => {
+        const changedSnapshot = new Set(changedFiles);
+        const options = determineBuildOptions(changedFiles);
+        const changedList = Array.from(changedFiles).join(', ');
+        logger.debug(`🔄 Change detected: ${changedList}`);
+        logger.debug(
+          `📦 Rebuilding (in-memory): ${options.setup ? 'setup' : ''}${options.setup && options.server ? ' + ' : ''}${options.server ? 'server' : ''}`
+        );
+        changedFiles.clear();
+        performBuild(options, changedSnapshot);
+      }, 100);
+    }
+  });
+
+  // Return cleanup function
+  return () => {
+    watcher.close();
+    if (buildTimeout) {
+      clearTimeout(buildTimeout);
+    }
+  };
+}
+
 // Run as CLI if executed directly
 if (import.meta.main) {
   const watchMode = process.argv.includes('--watch');

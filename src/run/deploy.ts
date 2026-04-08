@@ -11,10 +11,10 @@
  *   bun start --once            # Deploy once without watching
  */
 
-import { join } from 'node:path';
 import { logger } from '../utils/logger.ts';
 import { shutdown } from '../utils/shutdown.ts';
-import { buildWatch } from './build.ts';
+import type { BuildOptions, BuildOutput, BuildResult } from './build.ts';
+import { buildWatchInMemory } from './build.ts';
 import {
   DeployAppDir,
   DeployBunBin,
@@ -153,17 +153,8 @@ async function installRemoteDependencies(config: DeployConfig, signal?: AbortSig
   logger.debug('Dependencies installed');
 }
 
-async function deployBuildFiles(
-  config: DeployConfig,
-  files: string[],
-  buildDir: string,
-  signal?: AbortSignal,
-  cleanup = false
-): Promise<void> {
-  if (files.length === 0) return;
-
-  // Sort files: assets first (CSS, hashed bundles), then source files
-  const sortedFiles = [...files].sort((a, b) => {
+function sortFilenamesForDeploy(files: string[]): string[] {
+  return [...files].sort((a, b) => {
     // Assets: CSS files and files with hash in name (e.g., index-abc123.js)
     const aIsAsset = a.endsWith('.css') || /^[^-]+-[^-]+\.(js|css)$/.test(a);
     const bIsAsset = b.endsWith('.css') || /^[^-]+-[^-]+\.(js|css)$/.test(b);
@@ -172,17 +163,29 @@ async function deployBuildFiles(
     if (!aIsAsset && bIsAsset) return 1;
     return a.localeCompare(b); // alphabetical within same category
   });
+}
 
-  logger.debug(`Transferring ${files.length} file${files.length !== 1 ? 's' : ''}...`);
+async function deployBuildOutputs(
+  config: DeployConfig,
+  outputs: BuildOutput[],
+  signal?: AbortSignal,
+  cleanupPreserveFiles?: string[]
+): Promise<void> {
+  if (!outputs.length) return;
 
-  // Upload files sequentially to avoid SSH channel exhaustion
-  // Assets first, then source files
-  const stagedFiles: StagedRemoteFile[] = [];
-  for (const filename of sortedFiles) {
-    const localPath = join(buildDir, filename);
-    const content = await Bun.file(localPath).text();
-    stagedFiles.push({ content, remotePath: `${DeployAppDir}/${filename}` });
-  }
+  // De-dupe by filename (last one wins)
+  const byName = new Map<string, string>();
+  for (const output of outputs) byName.set(output.filename, output.content);
+
+  const filenames = sortFilenamesForDeploy([...byName.keys()]);
+  if (!filenames.length) return;
+
+  logger.debug(`Transferring ${filenames.length} file${filenames.length !== 1 ? 's' : ''}...`);
+
+  const stagedFiles: StagedRemoteFile[] = filenames.map(filename => ({
+    content: byName.get(filename) ?? '',
+    remotePath: `${DeployAppDir}/${filename}`,
+  }));
 
   await writeRemoteFilesStaged(config.sshConfig, stagedFiles, signal);
   for (const file of stagedFiles) {
@@ -190,75 +193,25 @@ async function deployBuildFiles(
   }
 
   // Clean up old files last if requested
-  if (cleanup) {
-    const fs = await import('node:fs/promises');
-    const localBuildFiles: string[] = [];
-    try {
-      const entries = await fs.readdir(buildDir, { withFileTypes: true });
-      for (const entry of entries) {
-        if (entry.isFile()) {
-          localBuildFiles.push(entry.name);
-        }
-      }
-    } catch {
-      // If we can't read the directory, skip cleanup
-      return;
-    }
+  if (cleanupPreserveFiles) {
+    const preserve = new Set(cleanupPreserveFiles);
+    const desired = new Set(filenames);
 
     const remoteFiles = (await readdir(config.sshConfig, DeployAppDir, signal))
       .filter(file => file.attrs.isFile())
       .map(file => file.filename);
 
-    const sourceFiles = remoteFiles.filter(file => file !== 'package.json');
-    const extraFiles = sourceFiles.filter(file => !localBuildFiles.includes(file));
+    const sourceFiles = remoteFiles.filter(file => !preserve.has(file));
+    const extraFiles = sourceFiles.filter(file => !desired.has(file));
 
     if (extraFiles.length > 0) {
       logger.debug(`Cleaning up ${extraFiles.length} extra file${extraFiles.length !== 1 ? 's' : ''}...`);
-      // Cleanup sequentially as well
+      // Cleanup sequentially to avoid SSH channel exhaustion
       for (const file of extraFiles) {
         await unlink(config.sshConfig, `${DeployAppDir}/${file}`, signal);
       }
     }
   }
-}
-
-async function deployAllBuildFiles(config: DeployConfig, buildDir: string, signal?: AbortSignal): Promise<void> {
-  logger.debug('Transferring all build files...');
-
-  // Read local build directory
-  const fs = await import('node:fs/promises');
-  const localBuildFiles: string[] = [];
-  try {
-    const entries = await fs.readdir(buildDir, { withFileTypes: true });
-    for (const entry of entries) {
-      if (entry.isFile()) {
-        localBuildFiles.push(entry.name);
-      }
-    }
-  } catch (error) {
-    throw new Error(`Failed to read build directory: ${error}`);
-  }
-
-  if (localBuildFiles.length === 0) {
-    throw new Error(`No files found in build directory: ${buildDir}`);
-  }
-
-  await deployBuildFiles(config, localBuildFiles, buildDir, signal);
-
-  // Clean up extra files on remote
-  const remoteFiles = (await readdir(config.sshConfig, DeployAppDir, signal))
-    .filter(file => file.attrs.isFile())
-    .map(file => file.filename);
-
-  const sourceFiles = remoteFiles.filter(file => file !== 'package.json' && file !== 'bun.lock');
-  const extraFiles = sourceFiles.filter(file => !localBuildFiles.includes(file));
-
-  if (extraFiles.length > 0) {
-    logger.debug(`Cleaning up ${extraFiles.length} extra file${extraFiles.length !== 1 ? 's' : ''}...`);
-    await Promise.all(extraFiles.map(file => unlink(config.sshConfig, `${DeployAppDir}/${file}`, signal)));
-  }
-
-  log(`Files deployed (${localBuildFiles.length} file${localBuildFiles.length !== 1 ? 's' : ''})`, '✅');
 }
 
 async function startService(config: DeployConfig, serviceName: string, signal?: AbortSignal): Promise<void> {
@@ -305,7 +258,7 @@ async function checkStatus(
   }
 }
 
-async function performInitialDeploy(config: DeployConfig, buildDir: string, signal?: AbortSignal): Promise<void> {
+async function performInitialDeploy(config: DeployConfig, buildResult: BuildResult, signal?: AbortSignal): Promise<void> {
   log('Starting initial deployment...', '🚀');
 
   // Check SSH connection
@@ -319,9 +272,12 @@ async function performInitialDeploy(config: DeployConfig, buildDir: string, sign
   // Ensure Bun is installed on remote
   await ensureBunInstalled(config, signal);
 
-  // Read setup bundle from build directory
+  // Read setup bundle from build result
   signal?.throwIfAborted();
-  const setupContent = await Bun.file(`${buildDir}/setup.js`).text();
+  const setupContent = buildResult.setup;
+  if (!setupContent) {
+    throw new Error('Setup bundle missing from build result');
+  }
   await deploySetupBundle(config, setupContent, signal);
 
   // Run setup (creates directories, installs system deps, configures services)
@@ -331,8 +287,14 @@ async function performInitialDeploy(config: DeployConfig, buildDir: string, sign
   await deployPackageFiles(config, signal);
   await installRemoteDependencies(config, signal);
 
-  // Deploy all build files
-  await deployAllBuildFiles(config, buildDir, signal);
+  // Deploy all build outputs (setup.js + server bundle files)
+  const serverOutputs = buildResult.server;
+  if (!serverOutputs || serverOutputs.length === 0) {
+    throw new Error('Server bundle missing from build result');
+  }
+  const appOutputs: BuildOutput[] = [{ filename: 'setup.js', content: setupContent }, ...serverOutputs];
+  await deployBuildOutputs(config, appOutputs, signal, ['package.json', 'bun.lock']);
+  log(`Files deployed (${appOutputs.length} file${appOutputs.length !== 1 ? 's' : ''})`, '✅');
 
   // Start dev service (systemd handles if already running)
   await startService(config, DeployDevServiceName, signal);
@@ -354,74 +316,176 @@ function logErrorMessage(prefix: string, err: unknown): void {
   }
 }
 
-async function watchMode(config: DeployConfig, buildDir = 'build'): Promise<void> {
-  log('Starting watch mode...', '👀');
-  logger.debug(`Monitoring: ${buildDir}/ for file changes`);
-
-  let currentUploadId = 0;
+function createIncrementalDeployHandler(config: DeployConfig) {
+  let currentDeployId = 0;
   let currentAbortController: AbortController | null = null;
-  let isUploading = false;
+  let isDeploying = false;
 
-  const triggerUpload = async (files: string[], enableCleanup = false) => {
-    // Abort any in-progress upload
+  const triggerDeploy = async (result: BuildResult, options: BuildOptions, changedFiles: Set<string>) => {
+    // Abort any in-progress deploy step (uploads or setup run)
     if (currentAbortController) {
-      logger.debug('Aborting previous upload...');
+      logger.debug('Aborting previous deploy...');
       currentAbortController.abort();
     }
 
-    // Wait for previous upload to finish cleaning up
-    while (isUploading) {
+    // Wait for previous deploy to finish cleaning up
+    while (isDeploying) {
       await new Promise(resolve => setTimeout(resolve, 100));
     }
 
-    // Capture files for this upload
-    const filesToUpload = [...files];
-    if (filesToUpload.length === 0) return;
-
-    // Start new upload with fresh abort controller
-    const uploadId = ++currentUploadId;
+    // Start new deploy with fresh abort controller
+    const deployId = ++currentDeployId;
     currentAbortController = new AbortController();
     const signal = currentAbortController.signal;
-    isUploading = true;
+    isDeploying = true;
 
     try {
-      await deployBuildFiles(config, filesToUpload, buildDir, signal, enableCleanup);
+      // If setup.ts changed, upload and re-run setup on the Pi (do NOT stop services).
+      const setupTsChanged = changedFiles.has('run/setup.ts');
+      if (setupTsChanged) {
+        if (!result.setup) {
+          logger.warn('setup.ts changed, but setup bundle was missing from build result');
+        } else {
+          await deploySetupBundle(config, result.setup, signal);
+          await runSetup(config, signal);
+        }
+      }
+
+      // Deploy build outputs to app dir
+      const outputs: BuildOutput[] = [];
+      if (options.setup) {
+        if (!result.setup) {
+          logger.warn('Build indicated setup output, but setup bundle was missing');
+        } else {
+          // Keep a copy of setup.js in the app dir (matches prior disk-based deploy behavior)
+          outputs.push({ filename: 'setup.js', content: result.setup });
+        }
+      }
+      if (options.server) {
+        if (!result.server) {
+          logger.warn('Build indicated server output, but server bundle was missing');
+        } else {
+          outputs.push(...result.server);
+        }
+      }
+      if (outputs.length === 0) return;
+
+      // Only cleanup remote files when server outputs are rebuilt; setup-only rebuilds must not delete the app bundle.
+      const cleanupPreserveFiles = options.server ? ['package.json'] : undefined;
+      await deployBuildOutputs(config, outputs, signal, cleanupPreserveFiles);
 
       // Only log success if we weren't aborted
-      if (uploadId === currentUploadId && !signal.aborted) {
-        logger.debug(`Upload complete: ${filesToUpload.length} file${filesToUpload.length !== 1 ? 's' : ''}`);
+      if (deployId === currentDeployId && !signal.aborted) {
+        logger.debug(`Deploy complete: ${outputs.length} file${outputs.length !== 1 ? 's' : ''}`);
       }
     } catch (err) {
       // Only log errors if we weren't aborted and are still current
-      if (uploadId === currentUploadId && !signal.aborted && !isAbortError(err)) {
-        logErrorMessage('Upload error:', err);
+      if (deployId === currentDeployId && !signal.aborted && !isAbortError(err)) {
+        logErrorMessage('Deploy error:', err);
       } else if (signal.aborted || isAbortError(err)) {
-        logger.debug('Upload aborted, superseded by new changes');
+        logger.debug('Deploy aborted, superseded by new changes');
       }
     } finally {
-      isUploading = false;
-      // Clear abort controller if we're still the current upload
-      if (uploadId === currentUploadId) currentAbortController = null;
+      isDeploying = false;
+      // Clear abort controller if we're still the current deploy
+      if (deployId === currentDeployId) currentAbortController = null;
     }
   };
 
-  // Debounced upload to batch rapid build completions
-  const debouncedUpload = debounce((files: string[], cleanup: boolean) => {
-    triggerUpload(files, cleanup);
+  // Debounced deploy to batch rapid rebuilds
+  const debouncedDeploy = debounce((result: BuildResult, options: BuildOptions, changedFiles: Set<string>) => {
+    triggerDeploy(result, options, changedFiles);
   }, 100);
 
-  // Start build watch process - this is the single source of truth
-  // Skip initial build since we just built and deployed
-  const buildCleanup = await buildWatch(
-    buildDir,
-    builtFiles => {
-      // When build completes, upload all built files with cleanup enabled
-      const filesArray = [...builtFiles];
-      logger.debug(`Build complete: ${filesArray.length} file${filesArray.length !== 1 ? 's' : ''}`);
-      debouncedUpload(filesArray, true);
-    },
-    true // skipInitialBuild: true
-  );
+  return (result: BuildResult, options: BuildOptions, changedFiles: Set<string>) => {
+    const builtFileCount = (options.setup && result.setup ? 1 : 0) + (options.server && result.server ? result.server.length : 0);
+    logger.debug(`Build complete: ${builtFileCount} file${builtFileCount !== 1 ? 's' : ''}`);
+    debouncedDeploy(result, options, changedFiles);
+  };
+}
+
+/**
+ * Run a function after a delay, but skip if the function is called again within the delay.
+ * @param fn - The function to debounce.
+ * @param delay - The delay in milliseconds.
+ * @returns A function that can be called to debounce the input value.
+ */
+function debounce<T extends unknown[]>(fn: (...args: T) => void, delay: number) {
+  let timeout: NodeJS.Timeout;
+  return (...args: T) => {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => {
+      fn(...args);
+    }, delay);
+  };
+}
+
+async function main() {
+  const config = await loadConfig();
+  const onceMode = process.argv.includes('--once');
+
+  log('Battery Charge & Discharge Controller - Development Deployment', '🔧');
+  logger.debug(`📡 Target: ${config.sshConfig.user}@${config.sshConfig.host}`);
+  logger.debug(`📂 App Dir: ${DeployAppDir}`);
+  if (onceMode) {
+    logger.debug('🎯 Mode: Deploy once (no watch)');
+  }
+
+  // Use watch mode for all builds (including the initial build). The deploy pipeline must not write build artifacts to local disk.
+  const incrementalDeploy = createIncrementalDeployHandler(config);
+
+  let initialBuild: BuildResult | null = null;
+  let initialDeployComplete = false;
+  let pendingAfterInit: { result: BuildResult; options: BuildOptions; changedFiles: Set<string> } | null = null;
+
+  // Start build watch process (does initial build before starting the file watcher)
+  const buildCleanup = await buildWatchInMemory((result, options, changedFiles) => {
+    // Capture the initial build for initial deployment
+    if (!initialBuild) {
+      initialBuild = result;
+      return;
+    }
+
+    // If initial deploy hasn't finished yet, keep only the latest build and apply it after init.
+    if (!initialDeployComplete) {
+      pendingAfterInit = { result, options, changedFiles };
+      return;
+    }
+
+    incrementalDeploy(result, options, changedFiles);
+  }, false);
+
+  if (!initialBuild) {
+    buildCleanup();
+    await closeSSHConnection();
+    throw new Error('Initial build did not produce a build result');
+  }
+
+  // Perform initial deployment (must run setup before starting the dev service)
+  try {
+    await performInitialDeploy(config, initialBuild);
+  } catch (err) {
+    buildCleanup();
+    logErrorMessage('❌ Initial deployment failed:', err);
+    await closeSSHConnection();
+    shutdown(1);
+  }
+
+  if (onceMode) {
+    buildCleanup();
+    log('Deployment complete! Exiting (--once mode)', '✅');
+    await closeSSHConnection();
+    return;
+  }
+
+  // Watch mode enabled: process any queued build, then keep running until SIGINT/SIGTERM.
+  log('Starting watch mode...', '👀');
+  logger.debug('Monitoring: src/ for file changes');
+  initialDeployComplete = true;
+  if (pendingAfterInit) {
+    incrementalDeploy(pendingAfterInit.result, pendingAfterInit.options, pendingAfterInit.changedFiles);
+    pendingAfterInit = null;
+  }
 
   // Exit handler: start main service and stop dev service
   const exitHandler = async () => {
@@ -445,81 +509,6 @@ async function watchMode(config: DeployConfig, buildDir = 'build'): Promise<void
 
   process.on('SIGINT', exitHandler);
   process.on('SIGTERM', exitHandler);
-}
-
-/**
- * Run a function after a delay, but skip if the function is called again within the delay.
- * @param fn - The function to debounce.
- * @param delay - The delay in milliseconds.
- * @returns A function that can be called to debounce the input value.
- */
-function debounce<T extends unknown[]>(fn: (...args: T) => void, delay: number) {
-  let timeout: NodeJS.Timeout;
-  return (...args: T) => {
-    clearTimeout(timeout);
-    timeout = setTimeout(() => {
-      fn(...args);
-    }, delay);
-  };
-}
-
-async function main() {
-  const config = await loadConfig();
-  const onceMode = process.argv.includes('--once');
-  const buildDir = 'build';
-
-  log('Battery Charge & Discharge Controller - Development Deployment', '🔧');
-  logger.debug(`📡 Target: ${config.sshConfig.user}@${config.sshConfig.host}`);
-  logger.debug(`📂 App Dir: ${DeployAppDir}`);
-  logger.debug(`📁 Build Dir: ${buildDir}`);
-  if (onceMode) {
-    logger.debug('🎯 Mode: Deploy once (no watch)');
-  }
-
-  // Clean and build to disk
-  const fs = await import('node:fs/promises');
-  const { rm } = await import('node:fs/promises');
-  try {
-    // Clean up build directory at startup
-    const buildExists = await fs.stat(buildDir).catch(() => null);
-    if (buildExists) {
-      logger.debug('Cleaning build directory...');
-      await rm(buildDir, { recursive: true, force: true });
-    }
-
-    // Always build fresh
-    log('Building project...', '🔨');
-    const buildModule = await import('./build');
-    await buildModule.buildToDisk({ setup: true, server: true }, buildDir);
-  } catch (err) {
-    logger.error('❌ Build failed:');
-    if (err instanceof Error) {
-      logger.error('Error:', err.message);
-      if (err.stack) {
-        logger.error('Stack:', err.stack);
-      }
-    } else {
-      logger.error('Error:', err);
-    }
-    shutdown(1);
-  }
-
-  // Perform initial deployment
-  try {
-    await performInitialDeploy(config, buildDir);
-  } catch (err) {
-    logErrorMessage('❌ Initial deployment failed:', err);
-    await closeSSHConnection();
-    shutdown(1);
-  }
-
-  // Watch for changes unless --once flag is set
-  if (!onceMode) {
-    await watchMode(config, buildDir);
-  } else {
-    log('Deployment complete! Exiting (--once mode)', '✅');
-    await closeSSHConnection();
-  }
 }
 
 main().catch(async error => {
