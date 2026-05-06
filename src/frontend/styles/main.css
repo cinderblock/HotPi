@@ -762,6 +762,153 @@ button:disabled {
   cursor: not-allowed;
 }
 
+/* Setpoint Control */
+.setpoint-control {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: var(--bg-color);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+}
+
+.setpoint-status {
+  display: flex;
+  gap: 1.5rem;
+  align-items: center;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.setpoint-progress {
+  flex: 1;
+  min-width: 200px;
+}
+
+.progress-bar {
+  height: 8px;
+  background: var(--border-color);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 0.25rem;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--primary-color);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.progress-text {
+  font-size: 0.8rem;
+  color: #888;
+  font-family: "Courier New", monospace;
+}
+
+.setpoint-temps {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.setpoint-temp-card {
+  text-align: center;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  min-width: 100px;
+}
+
+.setpoint-temp-card .label {
+  display: block;
+  font-size: 0.65rem;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.15rem;
+}
+
+.setpoint-temp-card .value {
+  display: block;
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: var(--text-color);
+  font-family: "Courier New", monospace;
+}
+
+.setpoint-temp-card.override-active {
+  border-color: var(--warning-color);
+  background: rgba(255, 152, 0, 0.08);
+}
+
+.setpoint-temp-card.override-active .value {
+  color: var(--warning-color);
+}
+
+.setpoint-adjust {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.setpoint-adjust label {
+  font-size: 0.75rem;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.setpoint-input-group {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.setpoint-input-group input[type="number"] {
+  width: 100px;
+  padding: 0.5rem 0.75rem;
+  background: var(--surface-color);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-color);
+  font-size: 1rem;
+  font-family: "Courier New", monospace;
+  text-align: right;
+}
+
+.setpoint-input-group input[type="number"]:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+.input-suffix {
+  color: #888;
+  font-size: 0.9rem;
+}
+
+button.btn-override {
+  padding: 0.5rem 1rem;
+  background: var(--warning-color);
+  color: #000;
+  font-size: 0.85rem;
+  font-weight: 600;
+  border-radius: 4px;
+}
+
+button.btn-override:hover {
+  background: #e68a00;
+}
+
+button.btn-resume {
+  padding: 0.5rem 1rem;
+  background: var(--success-color);
+  font-size: 0.85rem;
+  border-radius: 4px;
+}
+
+button.btn-resume:hover {
+  background: #45a049;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   header {

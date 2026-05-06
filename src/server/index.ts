@@ -161,6 +161,16 @@ async function main() {
                 profileRunner = null;
               }
               stateManager.addLogEntry('out', 'advanced: stop');
+            } else if (cmd === 'setOverride' && typeof data.data?.temp === 'number') {
+              if (profileRunner) {
+                profileRunner.setOverride(data.data.temp);
+                stateManager.addLogEntry('out', `advanced: override → ${Math.round(data.data.temp)}°C`);
+              }
+            } else if (cmd === 'clearOverride') {
+              if (profileRunner) {
+                profileRunner.clearOverride();
+                stateManager.addLogEntry('out', 'advanced: override cleared');
+              }
             } else if (cmd === 'getProfiles') {
               ws.send(JSON.stringify({ type: 'profiles', data: getAllProfiles() }));
             } else if (cmd === 'saveProfile' && data.data?.profile) {

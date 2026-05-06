@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ProfilePoint } from '../shared/profile.ts';
 import { PROFILE_LEAD_FREE } from '../shared/profile.ts';
 import type { ConnectionChain, ConnectionStatus } from './api-client.ts';
 import { ProfileEditorPanel } from './components/ProfileEditor.tsx';
 import ReflowChart, { type LiveDataPoint } from './components/ReflowChart.tsx';
 import Tooltip from './components/Tooltip.tsx';
-import { useOvenState, useProfiles, useSerialLog } from './hooks/useDeviceData.ts';
+import { type RunnerState, useOvenState, useProfiles, useRunnerState, useSerialLog } from './hooks/useDeviceData.ts';
 import { useWebSocketConnection } from './hooks/useWebSocket.ts';
 
 function useNow(interval = 1000) {
@@ -166,6 +166,99 @@ function TelemetryDisplay({ state }: { state: NonNullable<ReturnType<typeof useO
   );
 }
 
+function formatElapsed(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+function SetpointControl({
+  runnerState,
+  sendCommand,
+}: {
+  runnerState: RunnerState;
+  sendCommand: (cmd: string, data?: Record<string, unknown>) => void;
+}) {
+  const [inputTemp, setInputTemp] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleSetOverride = () => {
+    const temp = Number(inputTemp);
+    if (Number.isFinite(temp) && temp >= 0 && temp <= 300) {
+      sendCommand('setOverride', { temp });
+    }
+  };
+
+  const handleClearOverride = () => {
+    sendCommand('clearOverride');
+    setInputTemp('');
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') handleSetOverride();
+    if (e.key === 'Escape') handleClearOverride();
+  };
+
+  const progress = runnerState.totalDurationS > 0
+    ? Math.min(100, (runnerState.elapsedS / runnerState.totalDurationS) * 100)
+    : 0;
+
+  return (
+    <div className="setpoint-control">
+      <div className="setpoint-status">
+        <div className="setpoint-progress">
+          <div className="progress-bar">
+            <div className="progress-fill" style={{ width: `${progress}%` }} />
+          </div>
+          <span className="progress-text">
+            {formatElapsed(runnerState.elapsedS)} / {formatElapsed(runnerState.totalDurationS)}
+          </span>
+        </div>
+
+        <div className="setpoint-temps">
+          <div className="setpoint-temp-card">
+            <span className="label">Profile Target</span>
+            <span className="value">{runnerState.profileTempC.toFixed(0)}{'\u00B0'}C</span>
+          </div>
+          <div className={`setpoint-temp-card ${runnerState.overrideTempC !== null ? 'override-active' : ''}`}>
+            <span className="label">
+              {runnerState.overrideTempC !== null ? 'Override' : 'Active'} Target
+            </span>
+            <span className="value">{runnerState.targetTempC.toFixed(0)}{'\u00B0'}C</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="setpoint-adjust">
+        <label htmlFor="override-temp">Adjust Setpoint</label>
+        <div className="setpoint-input-group">
+          <input
+            ref={inputRef}
+            id="override-temp"
+            type="number"
+            min="0"
+            max="300"
+            step="5"
+            value={inputTemp}
+            onChange={e => setInputTemp(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={`${runnerState.targetTempC.toFixed(0)}`}
+          />
+          <span className="input-suffix">{'\u00B0'}C</span>
+          <button type="button" className="btn-override" onClick={handleSetOverride}>
+            Set
+          </button>
+          {runnerState.overrideTempC !== null && (
+            <button type="button" className="btn-resume" onClick={handleClearOverride}>
+              Resume Profile
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 type AppTab = 'profile' | 'monitor';
 
 export default function App() {
@@ -174,6 +267,7 @@ export default function App() {
   const { data: state } = useOvenState();
   const { data: logEntries = [] } = useSerialLog();
   const { data: savedProfiles = [] } = useProfiles();
+  const { data: runnerState } = useRunnerState();
 
   // Profile editor state
   const [profilePoints, setProfilePoints] = useState<ProfilePoint[]>([...PROFILE_LEAD_FREE.points]);
@@ -346,6 +440,9 @@ export default function App() {
               liveData={liveData}
               height={400}
             />
+            {runnerState?.status === 'running' && (
+              <SetpointControl runnerState={runnerState} sendCommand={sendCommand} />
+            )}
           </section>
         )}
 

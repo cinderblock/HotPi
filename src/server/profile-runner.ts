@@ -25,8 +25,12 @@ export interface RunnerState {
   status: RunnerStatus;
   /** Elapsed seconds since start */
   elapsedS: number;
-  /** Current target temperature from profile interpolation */
+  /** Current target temperature (override or profile interpolation) */
   targetTempC: number;
+  /** Temperature from profile interpolation at current elapsed time */
+  profileTempC: number;
+  /** If non-null, user has overridden the setpoint */
+  overrideTempC: number | null;
   /** Profile points being followed */
   profilePoints: ProfilePoint[];
   /** Total profile duration */
@@ -52,6 +56,7 @@ export class ProfileRunner {
   private tickTimer: Timer | null = null;
   private lastSentTemp = -1;
   private lastTelemetry: OvenTelemetry | null = null;
+  private overrideTempC: number | null = null;
   private listeners = new Set<RunnerListener>();
   private telemetryUnsub: (() => void) | null = null;
 
@@ -71,12 +76,15 @@ export class ProfileRunner {
   }
 
   getState(): RunnerState {
+    const profileTempC = this.profilePoints.length > 0
+      ? interpolateProfile(this.profilePoints, this.elapsedS)
+      : 0;
     return {
       status: this.status,
       elapsedS: this.elapsedS,
-      targetTempC: this.profilePoints.length > 0
-        ? interpolateProfile(this.profilePoints, this.elapsedS)
-        : 0,
+      profileTempC,
+      targetTempC: this.overrideTempC ?? profileTempC,
+      overrideTempC: this.overrideTempC,
       profilePoints: this.profilePoints,
       totalDurationS: this.totalDurationS,
     };
@@ -136,10 +144,11 @@ export class ProfileRunner {
     if (this.status !== 'running') return;
 
     const elapsed = this.elapsedS;
-    const targetTemp = interpolateProfile(this.profilePoints, elapsed);
+    const profileTemp = interpolateProfile(this.profilePoints, elapsed);
+    const targetTemp = this.overrideTempC ?? profileTemp;
 
-    // Check if profile is complete
-    if (elapsed >= this.totalDurationS) {
+    // Check if profile is complete (only when not overridden)
+    if (this.overrideTempC === null && elapsed >= this.totalDurationS) {
       // Profile time is up — check if we should keep cooling or stop
       const finalTemp = this.profilePoints[this.profilePoints.length - 1].tempC;
       if (finalTemp <= COOLDOWN_TEMP) {
@@ -157,7 +166,8 @@ export class ProfileRunner {
     // Only send a new bake command if the target temperature changed meaningfully
     if (Math.abs(targetTemp - this.lastSentTemp) >= TEMP_CHANGE_THRESHOLD) {
       const roundedTemp = Math.round(targetTemp);
-      logger.info(`Profile runner: ${elapsed.toFixed(0)}s → bake ${roundedTemp}°C`);
+      const source = this.overrideTempC !== null ? 'override' : 'profile';
+      logger.info(`Profile runner: ${elapsed.toFixed(0)}s → bake ${roundedTemp}°C (${source})`);
       await this.serial.startBake(roundedTemp);
       this.lastSentTemp = roundedTemp;
     }
@@ -181,6 +191,35 @@ export class ProfileRunner {
       this.telemetryUnsub();
       this.telemetryUnsub = null;
     }
+  }
+
+  // --- Live setpoint adjustment ---
+
+  /** Override the profile target with a manual temperature. Takes effect on next tick. */
+  setOverride(tempC: number): void {
+    if (this.status !== 'running') return;
+    this.overrideTempC = Math.round(tempC);
+    logger.info(`Profile runner: setpoint override → ${this.overrideTempC}°C`);
+    // Immediately tick to apply the override
+    this.tick().catch(err => {
+      logger.error('Profile runner tick error after override:', err);
+    });
+  }
+
+  /** Clear the manual override, resuming profile-following. */
+  clearOverride(): void {
+    if (this.overrideTempC === null) return;
+    logger.info('Profile runner: override cleared, resuming profile');
+    this.overrideTempC = null;
+    // Immediately tick to resume profile
+    this.tick().catch(err => {
+      logger.error('Profile runner tick error after clearing override:', err);
+    });
+  }
+
+  /** Whether the runner currently has a manual override active */
+  get hasOverride(): boolean {
+    return this.overrideTempC !== null;
   }
 
   // --- Listeners ---

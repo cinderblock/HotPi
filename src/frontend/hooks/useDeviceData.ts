@@ -31,3 +31,23 @@ export function useProfiles() {
     enabled: false,
   });
 }
+
+export interface RunnerState {
+  status: 'idle' | 'running' | 'completed' | 'stopped' | 'error';
+  elapsedS: number;
+  targetTempC: number;
+  profileTempC: number;
+  overrideTempC: number | null;
+  totalDurationS: number;
+  error?: string;
+}
+
+export function useRunnerState() {
+  return useQuery<RunnerState>({
+    queryKey: ['runnerState'],
+    queryFn: () => Promise.reject(new Error('Query disabled - data via WebSocket')),
+    initialData: undefined,
+    staleTime: 1000 * 60 * 5,
+    enabled: false,
+  });
+}

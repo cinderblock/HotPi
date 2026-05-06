@@ -80,7 +80,7 @@ Build a desktop web-based controller for a T-962 reflow oven, forked from batter
 12. [x] "Dynamic" setpoints: `DynamicSetpoint` interface (target temp + wait-until condition + hold duration) — type defined, runtime logic TBD
 13. [x] WYSIWYG profile editor: SVG-based drag points in `src/frontend/components/ProfileEditor.tsx`
 14. [x] Profile storage: JSON file persistence in `src/server/profiles.ts`, save/load/delete via WebSocket
-15. [ ] Live setpoint adjustment during runs
+15. [x] Live setpoint adjustment: override/resume controls during Advanced mode runs
 16. [x] Advanced mode control loop: `ProfileRunner` in `src/server/profile-runner.ts` — follows profile via `bake` commands at 2s intervals
 
 ### Phase 4: Chart & UI (IN PROGRESS)
@@ -144,6 +144,8 @@ Build a desktop web-based controller for a T-962 reflow oven, forked from batter
 - [x] Advanced mode control loop (`ProfileRunner` — follows profile via `bake` commands)
 - [x] Profile persistence (JSON file, save/load/delete via WebSocket)
 - [x] Profile selector + save/delete UI in App.tsx
+- [x] Live setpoint override: set manual temp or resume profile during Advanced runs
+- [x] Progress bar with elapsed/total time, profile target vs active target display
 - [ ] GPIO module + lpc-flash integration
 - [ ] Deploy and test on Pi
 
