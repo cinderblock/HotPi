@@ -12,6 +12,9 @@ dist/
 build/
 /frontend/
 
+# User data
+profiles.json
+
 # Logs
 *.log
 logs/

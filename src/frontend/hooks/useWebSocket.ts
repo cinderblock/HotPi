@@ -68,6 +68,12 @@ export function useWebSocketConnection() {
           ]);
         } else if (message.type === 'history') {
           queryClient.setQueryData(['serialLog'], message.data as SerialLogEntry[]);
+        } else if (message.type === 'runnerState') {
+          queryClient.setQueryData(['runnerState'], message.data);
+        } else if (message.type === 'profiles') {
+          queryClient.setQueryData(['profiles'], message.data);
+        } else if (message.type === 'profileSaved') {
+          queryClient.setQueryData(['lastSavedProfile'], message.data);
         } else if (message.type === 'heartbeat') {
           const heartbeatTs =
             message?.data && typeof message.data.timestamp === 'number' ? message.data.timestamp : Date.now();

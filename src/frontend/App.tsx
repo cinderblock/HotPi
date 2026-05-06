@@ -5,7 +5,7 @@ import type { ConnectionChain, ConnectionStatus } from './api-client.ts';
 import { ProfileEditorPanel } from './components/ProfileEditor.tsx';
 import ReflowChart, { type LiveDataPoint } from './components/ReflowChart.tsx';
 import Tooltip from './components/Tooltip.tsx';
-import { useOvenState, useSerialLog } from './hooks/useDeviceData.ts';
+import { useOvenState, useProfiles, useSerialLog } from './hooks/useDeviceData.ts';
 import { useWebSocketConnection } from './hooks/useWebSocket.ts';
 
 function useNow(interval = 1000) {
@@ -173,10 +173,12 @@ export default function App() {
   const { sendCommand } = useWebSocketConnection();
   const { data: state } = useOvenState();
   const { data: logEntries = [] } = useSerialLog();
+  const { data: savedProfiles = [] } = useProfiles();
 
   // Profile editor state
   const [profilePoints, setProfilePoints] = useState<ProfilePoint[]>([...PROFILE_LEAD_FREE.points]);
   const [profileName, setProfileName] = useState(PROFILE_LEAD_FREE.name);
+  const [activeProfileId, setActiveProfileId] = useState<string | null>(PROFILE_LEAD_FREE.id);
 
   // Tab state
   const [activeTab, setActiveTab] = useState<AppTab>('profile');
@@ -229,16 +231,41 @@ export default function App() {
     sendCommand('reflow');
   }, [sendCommand]);
 
-  const handleStartBake = useCallback(() => {
-    // Use the peak temperature from the current profile
-    const peakTemp = Math.max(...profilePoints.map(p => p.tempC));
+  const handleStartAdvanced = useCallback(() => {
     setLiveData([]);
-    sendCommand('bake', { temp: peakTemp });
+    sendCommand('startAdvanced', { points: profilePoints });
   }, [sendCommand, profilePoints]);
 
   const handleStop = useCallback(() => {
     sendCommand('stop');
+    sendCommand('stopAdvanced');
   }, [sendCommand]);
+
+  const handleSaveProfile = useCallback(() => {
+    sendCommand('saveProfile', {
+      profile: {
+        id: activeProfileId?.startsWith('builtin-') ? `user-${Date.now()}` : (activeProfileId ?? `user-${Date.now()}`),
+        name: profileName,
+        points: profilePoints,
+      },
+    });
+  }, [sendCommand, activeProfileId, profileName, profilePoints]);
+
+  const handleLoadProfile = useCallback((profileId: string) => {
+    const profile = savedProfiles.find(p => p.id === profileId);
+    if (profile) {
+      setProfilePoints([...profile.points]);
+      setProfileName(profile.name);
+      setActiveProfileId(profile.id);
+    }
+  }, [savedProfiles]);
+
+  const handleDeleteProfile = useCallback((profileId: string) => {
+    sendCommand('deleteProfile', { id: profileId });
+    if (activeProfileId === profileId) {
+      setActiveProfileId(null);
+    }
+  }, [sendCommand, activeProfileId]);
 
   if (!state || timeOffset === undefined) return <div>Loading...</div>;
 
@@ -272,7 +299,35 @@ export default function App() {
         {/* Profile Editor Tab */}
         {activeTab === 'profile' && (
           <section className="profile-section">
-            <h2>Reflow Profile</h2>
+            <div className="section-header">
+              <h2>Reflow Profile</h2>
+              <div className="profile-actions">
+                {savedProfiles.length > 0 && (
+                  <select
+                    className="profile-select"
+                    value={activeProfileId ?? ''}
+                    onChange={e => handleLoadProfile(e.target.value)}
+                  >
+                    <option value="" disabled>Load profile...</option>
+                    {savedProfiles.map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                )}
+                <button type="button" className="btn-save" onClick={handleSaveProfile}>
+                  Save Profile
+                </button>
+                {activeProfileId && !activeProfileId.startsWith('builtin-') && (
+                  <button
+                    type="button"
+                    className="btn-delete"
+                    onClick={() => handleDeleteProfile(activeProfileId)}
+                  >
+                    Delete
+                  </button>
+                )}
+              </div>
+            </div>
             <ProfileEditorPanel
               points={profilePoints}
               onPointsChange={setProfilePoints}
@@ -305,8 +360,8 @@ export default function App() {
             <button type="button" onClick={handleStartReflow} className="btn-start" disabled={isRunning}>
               Start Reflow (Saved)
             </button>
-            <button type="button" onClick={handleStartBake} className="btn-start btn-advanced" disabled={isRunning}>
-              Start Bake (Advanced)
+            <button type="button" onClick={handleStartAdvanced} className="btn-start btn-advanced" disabled={isRunning}>
+              Start Advanced
             </button>
             <button type="button" onClick={handleStop} className="btn-stop">
               Stop

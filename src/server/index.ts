@@ -6,9 +6,12 @@
  */
 
 import type { ServerWebSocket } from 'bun';
+import type { ProfilePoint } from '../shared/profile.ts';
 import homepage from '../frontend/index.html';
 import { logger } from '../utils/logger.ts';
 import { shutdown } from '../utils/shutdown.ts';
+import { ProfileRunner } from './profile-runner.ts';
+import { deleteProfile, getAllProfiles, loadProfiles, saveProfile } from './profiles.ts';
 import { SerialManager } from './serial.ts';
 import { StateManager } from './state.ts';
 
@@ -23,6 +26,10 @@ async function main() {
 
   const stateManager = new StateManager();
   const serialManager = new SerialManager();
+  let profileRunner: ProfileRunner | null = null;
+
+  // Load saved profiles
+  loadProfiles();
 
   await serialManager.connect();
 
@@ -92,6 +99,7 @@ async function main() {
         // Send initial state
         ws.send(JSON.stringify({ type: 'state', data: stateManager.getState() }));
         ws.send(JSON.stringify({ type: 'history', data: stateManager.getLogHistory() }));
+        ws.send(JSON.stringify({ type: 'profiles', data: getAllProfiles() }));
         resetHeartbeatWatchdog();
       },
 
@@ -135,6 +143,42 @@ async function main() {
             } else if (cmd === 'setting' && typeof data.data?.id === 'number') {
               await serialManager.setSetting(data.data.id, data.data.value);
               stateManager.addLogEntry('out', `setting ${data.data.id} ${data.data.value}`);
+            } else if (cmd === 'startAdvanced' && Array.isArray(data.data?.points)) {
+              // Stop any existing runner
+              if (profileRunner) {
+                await profileRunner.stop();
+              }
+              const points = data.data.points as ProfilePoint[];
+              profileRunner = new ProfileRunner(serialManager, points);
+              profileRunner.addListener(runnerState => {
+                broadcastToClients(JSON.stringify({ type: 'runnerState', data: runnerState }));
+              });
+              await profileRunner.start();
+              stateManager.addLogEntry('out', `advanced: start ${points.length}-point profile`);
+            } else if (cmd === 'stopAdvanced') {
+              if (profileRunner) {
+                await profileRunner.stop();
+                profileRunner = null;
+              }
+              stateManager.addLogEntry('out', 'advanced: stop');
+            } else if (cmd === 'getProfiles') {
+              ws.send(JSON.stringify({ type: 'profiles', data: getAllProfiles() }));
+            } else if (cmd === 'saveProfile' && data.data?.profile) {
+              const saved = saveProfile(data.data.profile);
+              // Broadcast updated profile list to all clients
+              const msg = JSON.stringify({ type: 'profiles', data: getAllProfiles() });
+              for (const client of wsClients) {
+                try { client.send(msg); } catch {}
+              }
+              ws.send(JSON.stringify({ type: 'profileSaved', data: saved }));
+            } else if (cmd === 'deleteProfile' && typeof data.data?.id === 'string') {
+              const deleted = deleteProfile(data.data.id);
+              if (deleted) {
+                const msg = JSON.stringify({ type: 'profiles', data: getAllProfiles() });
+                for (const client of wsClients) {
+                  try { client.send(msg); } catch {}
+                }
+              }
             } else if (cmd === 'raw' && typeof data.data?.text === 'string') {
               await serialManager.sendCommand(data.data.text);
               stateManager.addLogEntry('out', data.data.text);
@@ -184,6 +228,7 @@ async function main() {
   process.on('SIGINT', async () => {
     logger.info('Shutting down...');
     if (heartbeatWatchdog !== null) clearTimeout(heartbeatWatchdog);
+    if (profileRunner) await profileRunner.stop();
     await serialManager.disconnect();
     server.stop();
     shutdown(0);

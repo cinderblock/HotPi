@@ -79,9 +79,9 @@ Build a desktop web-based controller for a T-962 reflow oven, forked from batter
 11. [x] Profile data model: `ProfilePoint`, `DynamicSetpoint`, `Profile`, `T962Profile` in `src/shared/profile.ts`
 12. [x] "Dynamic" setpoints: `DynamicSetpoint` interface (target temp + wait-until condition + hold duration) — type defined, runtime logic TBD
 13. [x] WYSIWYG profile editor: SVG-based drag points in `src/frontend/components/ProfileEditor.tsx`
-14. [ ] Profile storage (DB + import/export)
+14. [x] Profile storage: JSON file persistence in `src/server/profiles.ts`, save/load/delete via WebSocket
 15. [ ] Live setpoint adjustment during runs
-16. [ ] Advanced mode control loop (server-side: follow profile via `bake` commands)
+16. [x] Advanced mode control loop: `ProfileRunner` in `src/server/profile-runner.ts` — follows profile via `bake` commands at 2s intervals
 
 ### Phase 4: Chart & UI (IN PROGRESS)
 17. [x] Adapt chart: X=time, Y=temperature with profile overlay using uPlot (`src/frontend/components/ReflowChart.tsx`)
@@ -141,8 +141,9 @@ Build a desktop web-based controller for a T-962 reflow oven, forked from batter
 - [x] Extended serial commands: `bake`, `dump profile`, `setting`, `about`, `values`
 - [x] Tabbed App UI: Profile Editor + Live Monitor, auto-switch on run start
 - [x] Live data accumulation from telemetry during REFLOW/BAKE modes
-- [ ] Advanced mode control loop (server-side profile following via `bake`)
-- [ ] Profile persistence (save/load)
+- [x] Advanced mode control loop (`ProfileRunner` — follows profile via `bake` commands)
+- [x] Profile persistence (JSON file, save/load/delete via WebSocket)
+- [x] Profile selector + save/delete UI in App.tsx
 - [ ] GPIO module + lpc-flash integration
 - [ ] Deploy and test on Pi
 

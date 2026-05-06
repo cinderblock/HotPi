@@ -629,6 +629,66 @@ button.btn-stop:hover {
   font-family: "Courier New", monospace;
 }
 
+/* Section headers */
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.section-header h2 {
+  margin-bottom: 0;
+}
+
+.profile-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.profile-select {
+  padding: 0.4rem 0.6rem;
+  background: var(--bg-color);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-color);
+  font-size: 0.85rem;
+  cursor: pointer;
+  min-width: 150px;
+}
+
+.profile-select:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+button.btn-save {
+  padding: 0.4rem 1rem;
+  background: var(--primary-color);
+  font-size: 0.85rem;
+  border-radius: 4px;
+}
+
+button.btn-save:hover {
+  background: #005a9e;
+}
+
+button.btn-delete {
+  padding: 0.4rem 0.75rem;
+  background: transparent;
+  border: 1px solid var(--error-color);
+  color: var(--error-color);
+  font-size: 0.85rem;
+  border-radius: 4px;
+}
+
+button.btn-delete:hover {
+  background: rgba(244, 67, 54, 0.1);
+}
+
 /* Tab Navigation */
 .tab-nav {
   display: flex;
