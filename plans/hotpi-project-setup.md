@@ -83,14 +83,14 @@ Build a desktop web-based controller for a T-962 reflow oven, forked from batter
 15. [x] Live setpoint adjustment: override/resume controls during Advanced mode runs
 16. [x] Advanced mode control loop: `ProfileRunner` in `src/server/profile-runner.ts` — follows profile via `bake` commands at 2s intervals
 
-### Phase 4: Chart & UI (IN PROGRESS)
+### Phase 4: Chart & UI (DONE)
 17. [x] Adapt chart: X=time, Y=temperature with profile overlay using uPlot (`src/frontend/components/ReflowChart.tsx`)
 18. [x] Show real-time temps overlaid on profile curve (actual, setpoint, profile)
-19. [x] Tab navigation: Profile Editor + Live Monitor tabs in App.tsx
+19. [x] Tab navigation: Profile Editor + Live Monitor + History tabs in App.tsx
 20. [x] Auto-switch to Live Monitor when reflow/bake starts
-21. [ ] Recent runs list (no historical archive)
-22. [ ] Post-run notes
-23. [ ] Heat/fan power visualization
+21. [x] Recent runs list with JSON persistence (`src/server/runs.ts`, max 20 runs)
+22. [x] Post-run notes: click to add/edit notes on completed runs
+23. [x] Heat/fan power visualization: secondary Y axis (Power %) with filled area series
 
 ### Phase 5: Firmware Flashing
 21. [ ] Integrate lpc-flash ISP protocol into server
@@ -146,6 +146,9 @@ Build a desktop web-based controller for a T-962 reflow oven, forked from batter
 - [x] Profile selector + save/delete UI in App.tsx
 - [x] Live setpoint override: set manual temp or resume profile during Advanced runs
 - [x] Progress bar with elapsed/total time, profile target vs active target display
+- [x] Heat/fan power visualization on chart (secondary Y axis, filled area)
+- [x] Recent runs list + post-run notes (JSON persistence, max 20 runs, History tab)
+- [x] Run auto-recording from telemetry mode transitions
 - [ ] GPIO module + lpc-flash integration
 - [ ] Deploy and test on Pi
 

@@ -25,6 +25,9 @@ interface ReflowChartProps {
   height?: number;
 }
 
+/** T-962 PWM max value */
+const PWM_MAX = 503;
+
 function buildProfileSeries(points: ProfilePoint[], maxTimeS: number): [number[], number[]] {
   if (points.length === 0) return [[], []];
 
@@ -68,7 +71,6 @@ export default function ReflowChart({ profilePoints, liveData, width, height = 3
 
     // Build aligned data arrays
     // uPlot expects: [xValues, series1, series2, ...]
-    // We'll use the profile time axis as the base and merge live data
     const allTimes = new Set<number>();
     for (const t of profileTimes) allTimes.add(t);
     for (const d of liveData) allTimes.add(d.timeS);
@@ -86,10 +88,13 @@ export default function ReflowChart({ profilePoints, liveData, width, height = 3
     }
 
     // Build uPlot data arrays
+    // Series: profile, actual, setpoint, heat%, fan%
     const xData = new Float64Array(sortedTimes);
     const profileData = new Float64Array(sortedTimes.length);
     const actualData = new Float64Array(sortedTimes.length);
     const setData = new Float64Array(sortedTimes.length);
+    const heatData = new Float64Array(sortedTimes.length);
+    const fanData = new Float64Array(sortedTimes.length);
 
     for (let i = 0; i < sortedTimes.length; i++) {
       const t = sortedTimes[i];
@@ -102,9 +107,11 @@ export default function ReflowChart({ profilePoints, liveData, width, height = 3
       const live = liveByTime.get(t);
       actualData[i] = live ? live.actual : NaN;
       setData[i] = live ? live.set : NaN;
+      heatData[i] = live ? (live.heat / PWM_MAX) * 100 : NaN;
+      fanData[i] = live ? (live.fan / PWM_MAX) * 100 : NaN;
     }
 
-    const data: uPlot.AlignedData = [xData, profileData, actualData, setData];
+    const data: uPlot.AlignedData = [xData, profileData, actualData, setData, heatData, fanData];
 
     const opts: uPlot.Options = {
       width: chartWidth,
@@ -112,6 +119,7 @@ export default function ReflowChart({ profilePoints, liveData, width, height = 3
       scales: {
         x: { time: false },
         y: { range: [0, 320] },
+        pwr: { range: [0, 100] },
       },
       axes: [
         {
@@ -120,14 +128,24 @@ export default function ReflowChart({ profilePoints, liveData, width, height = 3
           gap: 8,
         },
         {
-          label: 'Temperature (°C)',
+          scale: 'y',
+          label: 'Temperature (\u00B0C)',
           gap: 8,
+        },
+        {
+          scale: 'pwr',
+          side: 1, // right side
+          label: 'Power %',
+          gap: 8,
+          grid: { show: false },
+          values: (_self, ticks) => ticks.map(v => `${v}%`),
         },
       ],
       series: [
         { label: 'Time' },
         {
           label: 'Profile',
+          scale: 'y',
           stroke: 'rgba(100, 149, 237, 0.7)',
           width: 2,
           dash: [6, 3],
@@ -135,14 +153,30 @@ export default function ReflowChart({ profilePoints, liveData, width, height = 3
         },
         {
           label: 'Actual',
+          scale: 'y',
           stroke: '#ff6b35',
           width: 2.5,
         },
         {
           label: 'Setpoint',
+          scale: 'y',
           stroke: 'rgba(76, 175, 80, 0.6)',
           width: 1.5,
           dash: [4, 4],
+        },
+        {
+          label: 'Heat %',
+          scale: 'pwr',
+          stroke: 'rgba(244, 67, 54, 0.6)',
+          width: 1,
+          fill: 'rgba(244, 67, 54, 0.12)',
+        },
+        {
+          label: 'Fan %',
+          scale: 'pwr',
+          stroke: 'rgba(0, 188, 212, 0.6)',
+          width: 1,
+          fill: 'rgba(0, 188, 212, 0.12)',
         },
       ],
       cursor: {

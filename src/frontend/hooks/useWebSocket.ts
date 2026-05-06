@@ -72,6 +72,8 @@ export function useWebSocketConnection() {
           queryClient.setQueryData(['runnerState'], message.data);
         } else if (message.type === 'profiles') {
           queryClient.setQueryData(['profiles'], message.data);
+        } else if (message.type === 'runs') {
+          queryClient.setQueryData(['runs'], message.data);
         } else if (message.type === 'profileSaved') {
           queryClient.setQueryData(['lastSavedProfile'], message.data);
         } else if (message.type === 'heartbeat') {

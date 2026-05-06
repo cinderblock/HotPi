@@ -32,6 +32,29 @@ export function useProfiles() {
   });
 }
 
+export interface Run {
+  id: string;
+  startedAt: number;
+  endedAt: number;
+  status: 'completed' | 'stopped' | 'error';
+  mode: 'reflow' | 'advanced';
+  profileName: string;
+  data: { timeS: number; actual: number; set: number; temp0: number; temp1: number; heat: number; fan: number }[];
+  peakTempC: number;
+  durationS: number;
+  notes?: string;
+}
+
+export function useRuns() {
+  return useQuery<Run[]>({
+    queryKey: ['runs'],
+    queryFn: () => Promise.reject(new Error('Query disabled - data via WebSocket')),
+    initialData: [],
+    staleTime: 1000 * 60 * 5,
+    enabled: false,
+  });
+}
+
 export interface RunnerState {
   status: 'idle' | 'running' | 'completed' | 'stopped' | 'error';
   elapsedS: number;

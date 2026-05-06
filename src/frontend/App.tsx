@@ -5,7 +5,7 @@ import type { ConnectionChain, ConnectionStatus } from './api-client.ts';
 import { ProfileEditorPanel } from './components/ProfileEditor.tsx';
 import ReflowChart, { type LiveDataPoint } from './components/ReflowChart.tsx';
 import Tooltip from './components/Tooltip.tsx';
-import { type RunnerState, useOvenState, useProfiles, useRunnerState, useSerialLog } from './hooks/useDeviceData.ts';
+import { type Run, type RunnerState, useOvenState, useProfiles, useRunnerState, useRuns, useSerialLog } from './hooks/useDeviceData.ts';
 import { useWebSocketConnection } from './hooks/useWebSocket.ts';
 
 function useNow(interval = 1000) {
@@ -259,7 +259,95 @@ function SetpointControl({
   );
 }
 
-type AppTab = 'profile' | 'monitor';
+function formatDate(epochMs: number): string {
+  return new Date(epochMs).toLocaleString();
+}
+
+function RunHistoryList({
+  runs,
+  sendCommand,
+}: {
+  runs: Run[];
+  sendCommand: (cmd: string, data?: Record<string, unknown>) => void;
+}) {
+  const [editingNotes, setEditingNotes] = useState<string | null>(null);
+  const [notesText, setNotesText] = useState('');
+
+  const startEditNotes = (run: Run) => {
+    setEditingNotes(run.id);
+    setNotesText(run.notes ?? '');
+  };
+
+  const saveNotes = () => {
+    if (editingNotes) {
+      sendCommand('updateRunNotes', { id: editingNotes, notes: notesText });
+      setEditingNotes(null);
+    }
+  };
+
+  if (runs.length === 0) {
+    return <p className="no-data">No runs recorded yet.</p>;
+  }
+
+  return (
+    <div className="runs-list">
+      {runs.map(run => (
+        <div key={run.id} className="run-card">
+          <div className="run-header">
+            <div className="run-title">
+              <span className={`run-mode ${run.mode}`}>{run.mode}</span>
+              <span className="run-profile-name">{run.profileName}</span>
+              <span className={`run-status ${run.status}`}>{run.status}</span>
+            </div>
+            <div className="run-meta">
+              <span>{formatDate(run.startedAt)}</span>
+              <span>{formatElapsed(run.durationS)}</span>
+              <span>Peak: {run.peakTempC.toFixed(0)}{'\u00B0'}C</span>
+              <span>{run.data.length} pts</span>
+            </div>
+          </div>
+
+          <div className="run-notes-section">
+            {editingNotes === run.id ? (
+              <div className="notes-editor">
+                <textarea
+                  value={notesText}
+                  onChange={e => setNotesText(e.target.value)}
+                  placeholder="Add notes about this run..."
+                  rows={3}
+                />
+                <div className="notes-actions">
+                  <button type="button" className="btn-save" onClick={saveNotes}>Save</button>
+                  <button type="button" className="btn-delete" onClick={() => setEditingNotes(null)}>Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <div className="notes-display" onClick={() => startEditNotes(run)}>
+                {run.notes ? (
+                  <p className="notes-text">{run.notes}</p>
+                ) : (
+                  <p className="notes-placeholder">Click to add notes...</p>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="run-actions">
+            <button
+              type="button"
+              className="btn-delete"
+              onClick={() => sendCommand('deleteRun', { id: run.id })}
+            >
+              Delete
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+type AppTab = 'profile' | 'monitor' | 'history';
 
 export default function App() {
   const [timeOffset, setTimeOffset] = useState<number>();
@@ -268,6 +356,7 @@ export default function App() {
   const { data: logEntries = [] } = useSerialLog();
   const { data: savedProfiles = [] } = useProfiles();
   const { data: runnerState } = useRunnerState();
+  const { data: runs = [] } = useRuns();
 
   // Profile editor state
   const [profilePoints, setProfilePoints] = useState<ProfilePoint[]>([...PROFILE_LEAD_FREE.points]);
@@ -322,13 +411,13 @@ export default function App() {
 
   const handleStartReflow = useCallback(() => {
     setLiveData([]);
-    sendCommand('reflow');
-  }, [sendCommand]);
+    sendCommand('reflow', { profileName, profilePoints });
+  }, [sendCommand, profileName, profilePoints]);
 
   const handleStartAdvanced = useCallback(() => {
     setLiveData([]);
-    sendCommand('startAdvanced', { points: profilePoints });
-  }, [sendCommand, profilePoints]);
+    sendCommand('startAdvanced', { points: profilePoints, profileName });
+  }, [sendCommand, profilePoints, profileName]);
 
   const handleStop = useCallback(() => {
     sendCommand('stop');
@@ -388,6 +477,14 @@ export default function App() {
             Live Monitor
             {isRunning && <span className="tab-badge">LIVE</span>}
           </button>
+          <button
+            type="button"
+            className={`tab-btn ${activeTab === 'history' ? 'active' : ''}`}
+            onClick={() => setActiveTab('history')}
+          >
+            History
+            {runs.length > 0 && <span className="tab-count">{runs.length}</span>}
+          </button>
         </nav>
 
         {/* Profile Editor Tab */}
@@ -443,6 +540,14 @@ export default function App() {
             {runnerState?.status === 'running' && (
               <SetpointControl runnerState={runnerState} sendCommand={sendCommand} />
             )}
+          </section>
+        )}
+
+        {/* History Tab */}
+        {activeTab === 'history' && (
+          <section className="history-section">
+            <h2>Recent Runs</h2>
+            <RunHistoryList runs={runs} sendCommand={sendCommand} />
           </section>
         )}
 

@@ -14,6 +14,7 @@ build/
 
 # User data
 profiles.json
+runs.json
 
 # Logs
 *.log

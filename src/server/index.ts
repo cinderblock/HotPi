@@ -12,6 +12,7 @@ import { logger } from '../utils/logger.ts';
 import { shutdown } from '../utils/shutdown.ts';
 import { ProfileRunner } from './profile-runner.ts';
 import { deleteProfile, getAllProfiles, loadProfiles, saveProfile } from './profiles.ts';
+import { type RunDataPoint, addRun, deleteRun, getAllRuns, loadRuns, updateRunNotes } from './runs.ts';
 import { SerialManager } from './serial.ts';
 import { StateManager } from './state.ts';
 
@@ -28,8 +29,17 @@ async function main() {
   const serialManager = new SerialManager();
   let profileRunner: ProfileRunner | null = null;
 
-  // Load saved profiles
+  // Load saved data
   loadProfiles();
+  loadRuns();
+
+  // Run recording state
+  let activeRunData: RunDataPoint[] = [];
+  let activeRunStart = 0;
+  let activeRunMode: 'reflow' | 'advanced' = 'reflow';
+  let activeRunProfileName = '';
+  let activeRunProfilePoints: ProfilePoint[] = [];
+  let wasRunning = false;
 
   await serialManager.connect();
 
@@ -46,9 +56,60 @@ async function main() {
     stateManager.addLogEntry('in', line);
   });
 
-  // Handle telemetry updates
+  // Handle telemetry updates + run recording
   serialManager.addTelemetryListener(telemetry => {
     stateManager.updateTelemetry(telemetry);
+
+    const isRunning = telemetry.mode === 'REFLOW' || telemetry.mode === 'BAKE';
+
+    if (isRunning && !wasRunning) {
+      // Run just started
+      activeRunStart = Date.now();
+      activeRunData = [];
+      if (telemetry.mode === 'REFLOW') {
+        activeRunMode = 'reflow';
+      }
+      // Advanced mode sets activeRunMode via the startAdvanced command
+      logger.info(`Run started: ${activeRunMode} mode`);
+    }
+
+    if (isRunning) {
+      activeRunData.push({
+        timeS: telemetry.time,
+        actual: telemetry.actual,
+        set: telemetry.set,
+        temp0: telemetry.temp0,
+        temp1: telemetry.temp1,
+        heat: telemetry.heat,
+        fan: telemetry.fan,
+      });
+    }
+
+    if (!isRunning && wasRunning && activeRunData.length > 0) {
+      // Run just ended — save it
+      const peakTempC = Math.max(...activeRunData.map(d => d.actual));
+      const durationS = activeRunData.length > 0
+        ? activeRunData[activeRunData.length - 1].timeS
+        : 0;
+      const run = {
+        id: `run-${activeRunStart}`,
+        startedAt: activeRunStart,
+        endedAt: Date.now(),
+        status: 'completed' as const,
+        mode: activeRunMode,
+        profileName: activeRunProfileName || 'Unknown',
+        profilePoints: [...activeRunProfilePoints],
+        data: activeRunData,
+        peakTempC,
+        durationS,
+      };
+      addRun(run);
+      // Broadcast updated runs list
+      broadcastToClients(JSON.stringify({ type: 'runs', data: getAllRuns() }));
+      activeRunData = [];
+    }
+
+    wasRunning = isRunning;
   });
 
   // Handle firmware version detection
@@ -100,6 +161,7 @@ async function main() {
         ws.send(JSON.stringify({ type: 'state', data: stateManager.getState() }));
         ws.send(JSON.stringify({ type: 'history', data: stateManager.getLogHistory() }));
         ws.send(JSON.stringify({ type: 'profiles', data: getAllProfiles() }));
+        ws.send(JSON.stringify({ type: 'runs', data: getAllRuns() }));
         resetHeartbeatWatchdog();
       },
 
@@ -122,6 +184,9 @@ async function main() {
               await serialManager.sendStop();
               stateManager.addLogEntry('out', 'stop');
             } else if (cmd === 'reflow') {
+              activeRunMode = 'reflow';
+              activeRunProfileName = data.data?.profileName ?? 'Saved Profile';
+              activeRunProfilePoints = Array.isArray(data.data?.profilePoints) ? data.data.profilePoints : [];
               await serialManager.startReflow();
               stateManager.addLogEntry('out', 'reflow');
             } else if (cmd === 'selectProfile' && typeof data.data?.index === 'number') {
@@ -149,6 +214,9 @@ async function main() {
                 await profileRunner.stop();
               }
               const points = data.data.points as ProfilePoint[];
+              activeRunMode = 'advanced';
+              activeRunProfileName = typeof data.data.profileName === 'string' ? data.data.profileName : 'Advanced Profile';
+              activeRunProfilePoints = [...points];
               profileRunner = new ProfileRunner(serialManager, points);
               profileRunner.addListener(runnerState => {
                 broadcastToClients(JSON.stringify({ type: 'runnerState', data: runnerState }));
@@ -188,6 +256,17 @@ async function main() {
                 for (const client of wsClients) {
                   try { client.send(msg); } catch {}
                 }
+              }
+            } else if (cmd === 'getRuns') {
+              ws.send(JSON.stringify({ type: 'runs', data: getAllRuns() }));
+            } else if (cmd === 'updateRunNotes' && typeof data.data?.id === 'string') {
+              updateRunNotes(data.data.id, data.data.notes ?? '');
+              ws.send(JSON.stringify({ type: 'runs', data: getAllRuns() }));
+            } else if (cmd === 'deleteRun' && typeof data.data?.id === 'string') {
+              deleteRun(data.data.id);
+              const msg = JSON.stringify({ type: 'runs', data: getAllRuns() });
+              for (const client of wsClients) {
+                try { client.send(msg); } catch {}
               }
             } else if (cmd === 'raw' && typeof data.data?.text === 'string') {
               await serialManager.sendCommand(data.data.text);
