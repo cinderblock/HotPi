@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { ConnectionChain, ConnectionStatus } from './api-client.ts';
 import Tooltip from './components/Tooltip.tsx';
-import { useDeviceState, useSerialMessages } from './hooks/useDeviceData.ts';
+import { useOvenState, useSerialLog } from './hooks/useDeviceData.ts';
 import { useWebSocketConnection } from './hooks/useWebSocket.ts';
 
 function useNow(interval = 1000) {
@@ -22,7 +22,6 @@ function prettySeconds(seconds: number) {
 function TimestampDisplay({ timestamp, offset }: { timestamp: number; offset?: number }) {
   offset ??= 0;
   const now = useNow(200);
-
   const delta = now - timestamp - offset;
   const abs = Math.abs(delta) / 1000;
   const pos = delta > 0;
@@ -81,7 +80,8 @@ function NodeIcon({
       ? 'M4 6h16v12H4z M6 8v8h12V8z M9 18h6v1H9z'
       : kind === 'backend'
         ? 'M5 6h14v4H5z M5 11h14v4H5z M5 16h14v4H5z'
-        : 'M12 4c-3.3 0-6 2.7-6 6v6h12v-6c0-3.3-2.7-6-6-6zm0 3a3 3 0 0 1 3 3v1H9v-1a3 3 0 0 1 3-3zm-3 8v-2h6v2H9z';
+        : // Oven icon
+          'M4 4h16v16H4z M6 6h12v4H6z M8 12h2v2H8z M14 12h2v2h-2z';
 
   return (
     <Tooltip content={content} placement="bottom">
@@ -98,21 +98,76 @@ function ConnectionChainView({ chain }: { chain: ConnectionChain }) {
   return (
     <div className="connection-chain">
       <NodeIcon kind="browser" label="Browser" status={chain.websocket} />
-      <LinkIndicator label="Browser ↔ Backend (websocket)" status={chain.websocket} />
-      <NodeIcon kind="backend" label="Backend" status={chain.websocket} />
-      <LinkIndicator label="Backend ↔ Device (serial)" status={chain.serialPort} />
-      <NodeIcon kind="device" label="Device" status={chain.device} />
+      <LinkIndicator label="Browser - Pi (websocket)" status={chain.websocket} />
+      <NodeIcon kind="backend" label="HotPi" status={chain.websocket} />
+      <LinkIndicator label="Pi - Oven (serial)" status={chain.serialPort} />
+      <NodeIcon kind="device" label="T-962" status={chain.device} />
+    </div>
+  );
+}
+
+function TelemetryDisplay({ state }: { state: NonNullable<ReturnType<typeof useOvenState>['data']> }) {
+  const t = state.telemetry;
+  if (!t) return <p className="no-data">Waiting for telemetry...</p>;
+
+  return (
+    <div className="telemetry-grid">
+      <div className="telemetry-card primary">
+        <span className="label">Actual</span>
+        <span className="value">{t.actual.toFixed(1)}°C</span>
+      </div>
+      <div className="telemetry-card">
+        <span className="label">Setpoint</span>
+        <span className="value">{t.set.toFixed(1)}°C</span>
+      </div>
+      <div className="telemetry-card">
+        <span className="label">Mode</span>
+        <span className="value mode">{t.mode}</span>
+      </div>
+      <div className="telemetry-card">
+        <span className="label">Cold Junc.</span>
+        <span className="value">{t.coldJ.toFixed(1)}°C</span>
+      </div>
+      <div className="telemetry-card small">
+        <span className="label">TC0</span>
+        <span className="value">{t.temp0.toFixed(1)}</span>
+      </div>
+      <div className="telemetry-card small">
+        <span className="label">TC1</span>
+        <span className="value">{t.temp1.toFixed(1)}</span>
+      </div>
+      <div className="telemetry-card small">
+        <span className="label">TC2</span>
+        <span className="value">{t.temp2.toFixed(1)}</span>
+      </div>
+      <div className="telemetry-card small">
+        <span className="label">TC3</span>
+        <span className="value">{t.temp3.toFixed(1)}</span>
+      </div>
+      <div className="telemetry-card">
+        <span className="label">Heater</span>
+        <span className="value">{t.heat}</span>
+      </div>
+      <div className="telemetry-card">
+        <span className="label">Fan</span>
+        <span className="value">{t.fan}</span>
+      </div>
+      {state.firmwareVersion && (
+        <div className="telemetry-card">
+          <span className="label">Firmware</span>
+          <span className="value">{state.firmwareVersion}</span>
+        </div>
+      )}
     </div>
   );
 }
 
 export default function App() {
-  const [timeOffset, setTimeOffset] = useState<number>(); // Server time - Client time
+  const [timeOffset, setTimeOffset] = useState<number>();
   const { sendCommand } = useWebSocketConnection();
-  const { data: state } = useDeviceState();
-  const { data: messages = [] } = useSerialMessages();
+  const { data: state } = useOvenState();
+  const { data: logEntries = [] } = useSerialLog();
 
-  // Calculate time offset once when we first receive state
   useEffect(() => {
     if (state && timeOffset === undefined) {
       const clientTime = Date.now();
@@ -121,32 +176,29 @@ export default function App() {
     }
   }, [state, timeOffset]);
 
-  const handleStart = () => {
-    sendCommand('start');
-  };
-
-  const handleStop = () => {
-    sendCommand('stop');
-  };
-
   if (!state || timeOffset === undefined) return <div>Loading...</div>;
 
   return (
     <div>
       <header>
-        <h1>Battery Charge & Discharge Controller</h1>
+        <h1>HotPi - Reflow Oven Controller</h1>
         {state.connectionChain && <ConnectionChainView chain={state.connectionChain} />}
       </header>
 
       <main>
+        <section className="telemetry">
+          <h2>Oven Status</h2>
+          <TelemetryDisplay state={state} />
+        </section>
+
         <section className="controls">
-          <h2>Device Controls</h2>
+          <h2>Controls</h2>
           <div className="control-panel">
-            <button type="button" onClick={handleStart} className="btn-start">
-              ▶ Start
+            <button type="button" onClick={() => sendCommand('reflow')} className="btn-start">
+              Start Reflow
             </button>
-            <button type="button" onClick={handleStop} className="btn-stop">
-              ⏹ Stop
+            <button type="button" onClick={() => sendCommand('stop')} className="btn-stop">
+              Stop
             </button>
           </div>
         </section>
@@ -155,7 +207,7 @@ export default function App() {
           <div
             style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}
           >
-            <h2 style={{ margin: 0 }}>Serial Packets (Hex)</h2>
+            <h2 style={{ margin: 0 }}>Serial Log</h2>
             {Math.abs(timeOffset) > 100 && (
               <span style={{ fontSize: '0.8rem', color: '#888' }}>
                 Time offset: {timeOffset > 0 ? '+' : ''}
@@ -164,11 +216,11 @@ export default function App() {
             )}
           </div>
           <div className="message-container">
-            {messages.map((msg, i) => (
-              <div key={`${msg.timestamp}-${i}`} className={`message-entry ${msg.direction}`}>
-                <TimestampDisplay timestamp={msg.timestamp} offset={timeOffset} />
-                <span className="message-direction">{msg.direction === 'in' ? '←' : '→'}</span>
-                <span className="message-content hex">{msg.content}</span>
+            {logEntries.map((entry, i) => (
+              <div key={`${entry.timestamp}-${i}`} className={`message-entry ${entry.direction}`}>
+                <TimestampDisplay timestamp={entry.timestamp} offset={timeOffset} />
+                <span className="message-direction">{entry.direction === 'in' ? '<' : '>'}</span>
+                <span className="message-content">{entry.content}</span>
               </div>
             ))}
           </div>

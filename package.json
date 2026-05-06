@@ -1,8 +1,9 @@
 {
-  "name": "battery-charge-discharge-controller",
+  "name": "hotpi",
   "version": "0.1.0",
   "type": "module",
   "main": "server.js",
+  "description": "Desktop reflow oven controller for T-962 with WYSIWYG profile editor, real-time charting, and serial flashing",
   "scripts": {
     "start": "bun --watch src/run/deploy.ts",
     "build": "bun run src/run/build.ts",

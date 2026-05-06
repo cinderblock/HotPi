@@ -27,7 +27,7 @@ function log(message: string, emoji = 'ℹ️') {
 }
 
 async function checkRemoteStatus(config: SSHConfig) {
-  logger.info('📊 Battery Charge & Discharge Controller - Remote Status');
+  logger.info('📊 HotPi Reflow Oven Controller - Remote Status');
   logger.info('======================================\n');
   logger.info(`Target: ${config.user}@${config.host}\n`);
 
@@ -46,12 +46,12 @@ async function checkRemoteStatus(config: SSHConfig) {
     logger.info(`\n${'='.repeat(60)}`);
     logger.info('🔧 Systemd Service Status');
     logger.info(`${'='.repeat(60)}\n`);
-    await sshExec(config, 'sudo systemctl status battery-controller --no-pager -l || echo "Service not found"');
+    await sshExec(config, 'sudo systemctl status hotpi --no-pager -l || echo "Service not found"');
 
     logger.info(`\n${'='.repeat(60)}`);
     logger.info('📝 Recent Logs (last 30 lines)');
     logger.info(`${'='.repeat(60)}\n`);
-    await sshExec(config, 'sudo journalctl -u battery-controller -n 30 --no-pager || echo "No logs available"');
+    await sshExec(config, 'sudo journalctl -u hotpi -n 30 --no-pager || echo "No logs available"');
 
     logger.info(`\n${'='.repeat(60)}`);
     logger.info('🌐 Network Information');
@@ -61,15 +61,15 @@ async function checkRemoteStatus(config: SSHConfig) {
     logger.info(`\n${'='.repeat(60)}`);
     logger.info('💾 Disk Usage');
     logger.info(`${'='.repeat(60)}\n`);
-    await sshExec(config, 'df -h /opt/battery-controller 2>/dev/null || df -h /');
+    await sshExec(config, 'df -h /opt/hotpi 2>/dev/null || df -h /');
 
     logger.info(`\n${'='.repeat(60)}`);
     logger.info(`🌐 Web Interface: http://${config.host}`);
     logger.info(`${'='.repeat(60)}\n`);
 
     logger.info('Commands:');
-    logger.info(`  View live logs: ssh ${config.user}@${config.host} "sudo journalctl -u battery-controller -f"`);
-    logger.info(`  Restart: ssh ${config.user}@${config.host} "sudo systemctl restart battery-controller"`);
+    logger.info(`  View live logs: ssh ${config.user}@${config.host} "sudo journalctl -u hotpi -f"`);
+    logger.info(`  Restart: ssh ${config.user}@${config.host} "sudo systemctl restart hotpi"`);
     logger.info('  Redeploy: bun run deploy\n');
   } catch (error) {
     logger.error('\n❌ Failed to fetch status:', error);

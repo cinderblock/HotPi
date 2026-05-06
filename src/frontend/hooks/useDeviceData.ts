@@ -1,22 +1,22 @@
 import { useQuery } from '@tanstack/react-query';
-import type { DeviceState, SerialMessage } from '../api-client.ts';
+import type { OvenState, SerialLogEntry } from '../api-client.ts';
 
-export function useDeviceState() {
-  return useQuery<DeviceState>({
-    queryKey: ['deviceState'],
+export function useOvenState() {
+  return useQuery<OvenState>({
+    queryKey: ['ovenState'],
     queryFn: () => Promise.reject(new Error('Query disabled - data via WebSocket')),
     initialData: undefined,
-    staleTime: 1000 * 60 * 5, // 5 minutes
-    enabled: false, // Data is updated via WebSocket setQueryData, not fetched
+    staleTime: 1000 * 60 * 5,
+    enabled: false,
   });
 }
 
-export function useSerialMessages() {
-  return useQuery<SerialMessage[]>({
-    queryKey: ['serialMessages'],
+export function useSerialLog() {
+  return useQuery<SerialLogEntry[]>({
+    queryKey: ['serialLog'],
     queryFn: () => Promise.reject(new Error('Query disabled - data via WebSocket')),
     initialData: [],
-    staleTime: 1000 * 60 * 5, // 5 minutes
-    enabled: false, // Data is updated via WebSocket setQueryData, not fetched
+    staleTime: 1000 * 60 * 5,
+    enabled: false,
   });
 }

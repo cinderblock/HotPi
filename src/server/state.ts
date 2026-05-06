@@ -1,60 +1,45 @@
 /**
- * Application state management
- * Maintains synchronized state between device and application
- *
- * PROTOCOL: Unknown - state structure will be determined during reverse engineering
+ * Application state management for HotPi reflow oven controller
  */
 
-/**
- * Connection status for each link in the chain
- */
+import type { OvenTelemetry } from './serial.ts';
+
 export interface ConnectionStatus {
   connected: boolean;
   lastActivity: number;
 }
 
-/**
- * Connection chain showing status of each communication link
- */
 export interface ConnectionChain {
   websocket: ConnectionStatus;
   serialPort: ConnectionStatus;
   device: ConnectionStatus;
 }
 
-/**
- * Placeholder for device-specific state properties
- * Replace with actual fields once protocol is understood
- */
-export interface DeviceState {
+/** Current oven state sent to the frontend */
+export interface OvenState {
   lastUpdate: number;
   connectionChain: ConnectionChain;
-
-  // TODO: Add device-specific state properties based on protocol
-  // Examples of possible fields (replace with actual):
-  // - Numeric readings (voltage, current, temperature, etc.)
-  // - Status flags (charging, discharging, fault states, etc.)
-  // - Configuration values
-  // - Error codes
-  // [key: string]: unknown;  // Uncomment for dynamic properties
+  /** Latest telemetry reading from the oven */
+  telemetry: OvenTelemetry | null;
+  /** Firmware version string (e.g. "v0.5.2") */
+  firmwareVersion: string | null;
+  /** Current oven mode */
+  mode: string | null;
 }
 
-/**
- * Serial message with timestamp
- * Content is hex string (e.g., "05 00 00 00 00 00 00 05")
- */
-export interface SerialMessage {
+/** A serial log entry (raw lines in/out for debugging) */
+export interface SerialLogEntry {
   timestamp: number;
   direction: 'in' | 'out';
-  content: string; // Hex string
+  content: string;
 }
 
 export class StateManager {
-  private state: DeviceState;
-  private listeners: Set<(state: DeviceState) => void>;
-  private messageHistory: SerialMessage[] = [];
-  private messageListeners: Set<(message: SerialMessage) => void> = new Set();
-  private readonly MAX_MESSAGES = 1000;
+  private state: OvenState;
+  private listeners = new Set<(state: OvenState) => void>();
+  private logHistory: SerialLogEntry[] = [];
+  private logListeners = new Set<(entry: SerialLogEntry) => void>();
+  private readonly MAX_LOG_ENTRIES = 500;
 
   constructor() {
     const now = Date.now();
@@ -65,151 +50,106 @@ export class StateManager {
         serialPort: { connected: false, lastActivity: now },
         device: { connected: false, lastActivity: now },
       },
+      telemetry: null,
+      firmwareVersion: null,
+      mode: null,
     };
-    this.listeners = new Set();
   }
 
-  /**
-   * Get current state
-   */
-  getState(): DeviceState {
+  getState(): OvenState {
     return { ...this.state };
   }
 
-  /**
-   * Update WebSocket connection status
-   */
+  // --- Connection status updates ---
+
   updateWebSocketStatus(connected: boolean) {
     const now = Date.now();
     this.state.connectionChain.websocket.connected = connected;
-    if (connected) {
-      this.state.connectionChain.websocket.lastActivity = now;
-    }
+    if (connected) this.state.connectionChain.websocket.lastActivity = now;
     this.state.lastUpdate = now;
     this.notifyListeners();
   }
 
-  /**
-   * Update serial port connection status
-   */
   updateSerialPortStatus(connected: boolean) {
     const now = Date.now();
     this.state.connectionChain.serialPort.connected = connected;
-    if (connected) {
-      this.state.connectionChain.serialPort.lastActivity = now;
-    }
+    if (connected) this.state.connectionChain.serialPort.lastActivity = now;
     this.state.lastUpdate = now;
     this.notifyListeners();
   }
 
-  /**
-   * Update device connection status
-   */
   updateDeviceStatus(connected: boolean) {
     const now = Date.now();
     this.state.connectionChain.device.connected = connected;
-    if (connected) {
-      this.state.connectionChain.device.lastActivity = now;
-    }
+    if (connected) this.state.connectionChain.device.lastActivity = now;
     this.state.lastUpdate = now;
     this.notifyListeners();
   }
 
-  /**
-   * Record WebSocket activity
-   */
   recordWebSocketActivity() {
-    const now = Date.now();
-    this.state.connectionChain.websocket.lastActivity = now;
-    this.state.lastUpdate = now;
+    this.state.connectionChain.websocket.lastActivity = Date.now();
+    this.state.lastUpdate = Date.now();
     this.notifyListeners();
   }
 
-  /**
-   * Record serial port activity
-   */
-  recordSerialPortActivity() {
-    const now = Date.now();
-    this.state.connectionChain.serialPort.lastActivity = now;
-    this.state.lastUpdate = now;
-    this.notifyListeners();
-  }
-
-  /**
-   * Record device activity (packet received)
-   */
   recordDeviceActivity() {
     const now = Date.now();
     this.state.connectionChain.device.lastActivity = now;
+    this.state.connectionChain.device.connected = true;
     this.state.lastUpdate = now;
     this.notifyListeners();
   }
 
-  /**
-   * Update device state from serial data
-   */
-  updateDeviceState(data: Partial<DeviceState>) {
-    this.state = {
-      ...this.state,
-      ...data,
-      lastUpdate: Date.now(),
-    };
+  // --- Oven-specific state updates ---
+
+  updateTelemetry(telemetry: OvenTelemetry) {
+    this.state.telemetry = telemetry;
+    this.state.mode = telemetry.mode;
+    this.state.lastUpdate = Date.now();
+    this.recordDeviceActivity();
+  }
+
+  updateFirmwareVersion(version: string) {
+    this.state.firmwareVersion = version;
+    this.state.lastUpdate = Date.now();
     this.notifyListeners();
   }
 
-  /**
-   * Subscribe to state changes
-   */
-  subscribe(listener: (state: DeviceState) => void) {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
-  }
+  // --- Serial log ---
 
-  /**
-   * Notify all listeners of state change
-   */
-  private notifyListeners() {
-    const state = this.getState();
-    for (const listener of this.listeners) {
-      listener(state);
-    }
-  }
-
-  /**
-   * Add a serial message to history
-   */
-  addMessage(direction: 'in' | 'out', content: string) {
-    const message: SerialMessage = {
+  addLogEntry(direction: 'in' | 'out', content: string) {
+    const entry: SerialLogEntry = {
       timestamp: Date.now(),
       direction,
       content,
     };
 
-    this.messageHistory.push(message);
-
-    // Keep only the last MAX_MESSAGES
-    if (this.messageHistory.length > this.MAX_MESSAGES) {
-      this.messageHistory.shift();
+    this.logHistory.push(entry);
+    if (this.logHistory.length > this.MAX_LOG_ENTRIES) {
+      this.logHistory.shift();
     }
 
-    // Notify message listeners
-    for (const listener of this.messageListeners) {
-      listener(message);
-    }
+    for (const listener of this.logListeners) listener(entry);
   }
 
-  /**
-   * Get message history
-   */
-  getMessageHistory(): SerialMessage[] {
-    return [...this.messageHistory];
+  getLogHistory(): SerialLogEntry[] {
+    return [...this.logHistory];
   }
 
-  /**
-   * Subscribe to new messages
-   */
-  subscribeToMessages(listener: (message: SerialMessage) => void) {
-    this.messageListeners.add(listener);
-    return () => this.messageListeners.delete(listener);
+  subscribeToLog(listener: (entry: SerialLogEntry) => void): () => void {
+    this.logListeners.add(listener);
+    return () => this.logListeners.delete(listener);
+  }
+
+  // --- State subscriptions ---
+
+  subscribe(listener: (state: OvenState) => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  private notifyListeners() {
+    const state = this.getState();
+    for (const listener of this.listeners) listener(state);
   }
 }

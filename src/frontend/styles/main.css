@@ -369,6 +369,70 @@ button.btn-stop:hover {
   background: #555;
 }
 
+/* Telemetry */
+.telemetry-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 0.75rem;
+}
+
+.telemetry-card {
+  background: var(--bg-color);
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  text-align: center;
+}
+
+.telemetry-card.primary {
+  border-color: var(--warning-color);
+  background: rgba(255, 152, 0, 0.08);
+}
+
+.telemetry-card.small {
+  padding: 0.5rem 0.75rem;
+}
+
+.telemetry-card .label {
+  display: block;
+  font-size: 0.75rem;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.25rem;
+}
+
+.telemetry-card .value {
+  display: block;
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+.telemetry-card.primary .value {
+  color: var(--warning-color);
+  font-size: 1.8rem;
+}
+
+.telemetry-card .value.mode {
+  color: var(--primary-color);
+  font-size: 1rem;
+  text-transform: uppercase;
+}
+
+.no-data {
+  color: #666;
+  text-align: center;
+  padding: 2rem;
+  font-style: italic;
+}
+
+.time {
+  color: #888;
+  font-size: 0.85rem;
+  font-family: "Courier New", monospace;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   header {
