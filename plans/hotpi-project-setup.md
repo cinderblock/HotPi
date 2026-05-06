@@ -75,19 +75,22 @@ Build a desktop web-based controller for a T-962 reflow oven, forked from batter
 9. [x] Update state manager for reflow data model (`src/server/state.ts`)
 10. [ ] GPIO control module (for reset/bootloader entry via Pi GPIO pins) — deferred to Phase 5
 
-### Phase 3: Reflow Profile System ← NEXT
-11. [ ] Profile data model: array of setpoints with time/temperature pairs
-12. [ ] "Dynamic" setpoints: target temp + wait-until condition + hold duration
-13. [ ] WYSIWYG profile editor: drag points on chart to define profile curve
+### Phase 3: Reflow Profile System (IN PROGRESS)
+11. [x] Profile data model: `ProfilePoint`, `DynamicSetpoint`, `Profile`, `T962Profile` in `src/shared/profile.ts`
+12. [x] "Dynamic" setpoints: `DynamicSetpoint` interface (target temp + wait-until condition + hold duration) — type defined, runtime logic TBD
+13. [x] WYSIWYG profile editor: SVG-based drag points in `src/frontend/components/ProfileEditor.tsx`
 14. [ ] Profile storage (DB + import/export)
 15. [ ] Live setpoint adjustment during runs
+16. [ ] Advanced mode control loop (server-side: follow profile via `bake` commands)
 
-### Phase 4: Chart & UI
-16. [ ] Adapt chart: X=time, Y=temperature with profile overlay (bring in uPlot)
-17. [ ] Show real-time temps (TC0-3, setpoint, actual) overlaid on profile curve
-18. [ ] Recent runs list (no historical archive)
-19. [ ] Post-run notes
-20. [ ] Heat/fan power visualization
+### Phase 4: Chart & UI (IN PROGRESS)
+17. [x] Adapt chart: X=time, Y=temperature with profile overlay using uPlot (`src/frontend/components/ReflowChart.tsx`)
+18. [x] Show real-time temps overlaid on profile curve (actual, setpoint, profile)
+19. [x] Tab navigation: Profile Editor + Live Monitor tabs in App.tsx
+20. [x] Auto-switch to Live Monitor when reflow/bake starts
+21. [ ] Recent runs list (no historical archive)
+22. [ ] Post-run notes
+23. [ ] Heat/fan power visualization
 
 ### Phase 5: Firmware Flashing
 21. [ ] Integrate lpc-flash ISP protocol into server
@@ -109,6 +112,8 @@ Build a desktop web-based controller for a T-962 reflow oven, forked from batter
 - The `toaster` project auto-updates firmware on boot if version doesn't match v0.5.2 — downloads hex from GitHub releases
 - `pigpio` requires `pigpiod` daemon — the bash history shows it was manually linked to `/usr/local/bin/pigpiod`
 - `toaster_` is an older CJS-bundled version of the same code
+- T-962 firmware has `dump profile <id>` to read profiles (48 CSV values) but NO write command — profiles can only be uploaded via keypad or EEPROM. For "Advanced" mode, use `bake <temp>` commands in a closed loop from the Pi.
+- Additional serial commands discovered: `bake <temp> [duration]`, `setting <id> <value>`, `about`, `values`
 
 ## Progress Log
 - [x] Explored battery-controller project structure
@@ -129,8 +134,15 @@ Build a desktop web-based controller for a T-962 reflow oven, forked from batter
 - [x] Added telemetry CSS grid styles
 - [x] New README.md with T-962 protocol docs and GPIO wiring table
 - [x] Verified build succeeds (Bun.build, 4 output files)
-- [ ] Build profile system (WYSIWYG editor, dynamic setpoints)
-- [ ] Build chart with profile overlay (uPlot)
+- [x] Profile data model with interpolation + T-962 format conversion (`src/shared/profile.ts`)
+- [x] Built-in profile templates: Lead-Free (SAC305) and Leaded (63/37)
+- [x] uPlot chart component with profile overlay + live data (`src/frontend/components/ReflowChart.tsx`)
+- [x] SVG-based WYSIWYG profile editor with drag, add, delete points (`src/frontend/components/ProfileEditor.tsx`)
+- [x] Extended serial commands: `bake`, `dump profile`, `setting`, `about`, `values`
+- [x] Tabbed App UI: Profile Editor + Live Monitor, auto-switch on run start
+- [x] Live data accumulation from telemetry during REFLOW/BAKE modes
+- [ ] Advanced mode control loop (server-side profile following via `bake`)
+- [ ] Profile persistence (save/load)
 - [ ] GPIO module + lpc-flash integration
 - [ ] Deploy and test on Pi
 

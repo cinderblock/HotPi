@@ -1,5 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import type { ProfilePoint } from '../shared/profile.ts';
+import { PROFILE_LEAD_FREE } from '../shared/profile.ts';
 import type { ConnectionChain, ConnectionStatus } from './api-client.ts';
+import { ProfileEditorPanel } from './components/ProfileEditor.tsx';
+import ReflowChart, { type LiveDataPoint } from './components/ReflowChart.tsx';
 import Tooltip from './components/Tooltip.tsx';
 import { useOvenState, useSerialLog } from './hooks/useDeviceData.ts';
 import { useWebSocketConnection } from './hooks/useWebSocket.ts';
@@ -114,11 +118,11 @@ function TelemetryDisplay({ state }: { state: NonNullable<ReturnType<typeof useO
     <div className="telemetry-grid">
       <div className="telemetry-card primary">
         <span className="label">Actual</span>
-        <span className="value">{t.actual.toFixed(1)}°C</span>
+        <span className="value">{t.actual.toFixed(1)}{'\u00B0'}C</span>
       </div>
       <div className="telemetry-card">
         <span className="label">Setpoint</span>
-        <span className="value">{t.set.toFixed(1)}°C</span>
+        <span className="value">{t.set.toFixed(1)}{'\u00B0'}C</span>
       </div>
       <div className="telemetry-card">
         <span className="label">Mode</span>
@@ -126,7 +130,7 @@ function TelemetryDisplay({ state }: { state: NonNullable<ReturnType<typeof useO
       </div>
       <div className="telemetry-card">
         <span className="label">Cold Junc.</span>
-        <span className="value">{t.coldJ.toFixed(1)}°C</span>
+        <span className="value">{t.coldJ.toFixed(1)}{'\u00B0'}C</span>
       </div>
       <div className="telemetry-card small">
         <span className="label">TC0</span>
@@ -162,11 +166,55 @@ function TelemetryDisplay({ state }: { state: NonNullable<ReturnType<typeof useO
   );
 }
 
+type AppTab = 'profile' | 'monitor';
+
 export default function App() {
   const [timeOffset, setTimeOffset] = useState<number>();
   const { sendCommand } = useWebSocketConnection();
   const { data: state } = useOvenState();
   const { data: logEntries = [] } = useSerialLog();
+
+  // Profile editor state
+  const [profilePoints, setProfilePoints] = useState<ProfilePoint[]>([...PROFILE_LEAD_FREE.points]);
+  const [profileName, setProfileName] = useState(PROFILE_LEAD_FREE.name);
+
+  // Tab state
+  const [activeTab, setActiveTab] = useState<AppTab>('profile');
+
+  // Live data accumulation (from telemetry)
+  const [liveData, setLiveData] = useState<LiveDataPoint[]>([]);
+  const [isRunning, setIsRunning] = useState(false);
+
+  // Track run state from telemetry mode
+  useEffect(() => {
+    if (!state?.telemetry) return;
+    const mode = state.telemetry.mode;
+    const running = mode === 'REFLOW' || mode === 'BAKE';
+
+    if (running && !isRunning) {
+      // Run just started — clear old data and switch to monitor tab
+      setLiveData([]);
+      setIsRunning(true);
+      setActiveTab('monitor');
+    } else if (!running && isRunning) {
+      setIsRunning(false);
+    }
+
+    if (running) {
+      setLiveData(prev => [
+        ...prev,
+        {
+          timeS: state.telemetry!.time,
+          actual: state.telemetry!.actual,
+          set: state.telemetry!.set,
+          temp0: state.telemetry!.temp0,
+          temp1: state.telemetry!.temp1,
+          heat: state.telemetry!.heat,
+          fan: state.telemetry!.fan,
+        },
+      ]);
+    }
+  }, [state?.telemetry]);
 
   useEffect(() => {
     if (state && timeOffset === undefined) {
@@ -175,6 +223,22 @@ export default function App() {
       setTimeOffset(offset);
     }
   }, [state, timeOffset]);
+
+  const handleStartReflow = useCallback(() => {
+    setLiveData([]);
+    sendCommand('reflow');
+  }, [sendCommand]);
+
+  const handleStartBake = useCallback(() => {
+    // Use the peak temperature from the current profile
+    const peakTemp = Math.max(...profilePoints.map(p => p.tempC));
+    setLiveData([]);
+    sendCommand('bake', { temp: peakTemp });
+  }, [sendCommand, profilePoints]);
+
+  const handleStop = useCallback(() => {
+    sendCommand('stop');
+  }, [sendCommand]);
 
   if (!state || timeOffset === undefined) return <div>Loading...</div>;
 
@@ -186,6 +250,50 @@ export default function App() {
       </header>
 
       <main>
+        {/* Tab navigation */}
+        <nav className="tab-nav">
+          <button
+            type="button"
+            className={`tab-btn ${activeTab === 'profile' ? 'active' : ''}`}
+            onClick={() => setActiveTab('profile')}
+          >
+            Profile Editor
+          </button>
+          <button
+            type="button"
+            className={`tab-btn ${activeTab === 'monitor' ? 'active' : ''}`}
+            onClick={() => setActiveTab('monitor')}
+          >
+            Live Monitor
+            {isRunning && <span className="tab-badge">LIVE</span>}
+          </button>
+        </nav>
+
+        {/* Profile Editor Tab */}
+        {activeTab === 'profile' && (
+          <section className="profile-section">
+            <h2>Reflow Profile</h2>
+            <ProfileEditorPanel
+              points={profilePoints}
+              onPointsChange={setProfilePoints}
+              profileName={profileName}
+              onNameChange={setProfileName}
+            />
+          </section>
+        )}
+
+        {/* Live Monitor Tab */}
+        {activeTab === 'monitor' && (
+          <section className="monitor-section">
+            <h2>Live Monitor</h2>
+            <ReflowChart
+              profilePoints={profilePoints}
+              liveData={liveData}
+              height={400}
+            />
+          </section>
+        )}
+
         <section className="telemetry">
           <h2>Oven Status</h2>
           <TelemetryDisplay state={state} />
@@ -194,10 +302,13 @@ export default function App() {
         <section className="controls">
           <h2>Controls</h2>
           <div className="control-panel">
-            <button type="button" onClick={() => sendCommand('reflow')} className="btn-start">
-              Start Reflow
+            <button type="button" onClick={handleStartReflow} className="btn-start" disabled={isRunning}>
+              Start Reflow (Saved)
             </button>
-            <button type="button" onClick={() => sendCommand('stop')} className="btn-stop">
+            <button type="button" onClick={handleStartBake} className="btn-start btn-advanced" disabled={isRunning}>
+              Start Bake (Advanced)
+            </button>
+            <button type="button" onClick={handleStop} className="btn-stop">
               Stop
             </button>
           </div>

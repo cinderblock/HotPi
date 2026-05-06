@@ -433,6 +433,275 @@ button.btn-stop:hover {
   font-family: "Courier New", monospace;
 }
 
+/* Profile Editor */
+.profile-editor {
+  outline: none;
+  user-select: none;
+}
+
+.profile-editor-svg {
+  background: var(--bg-color);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+}
+
+.profile-editor-svg .grid-line {
+  stroke: var(--border-color);
+  stroke-width: 0.5;
+  stroke-dasharray: 4 4;
+  opacity: 0.5;
+}
+
+.profile-editor-svg .axis-line {
+  stroke: #666;
+  stroke-width: 1;
+}
+
+.profile-editor-svg .axis-label {
+  fill: #888;
+  font-size: 11px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.profile-editor-svg .axis-title {
+  fill: #888;
+  font-size: 12px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.profile-editor-svg .t962-limit-line {
+  stroke: rgba(255, 152, 0, 0.3);
+  stroke-width: 1;
+  stroke-dasharray: 8 4;
+}
+
+.profile-editor-svg .profile-fill {
+  fill: rgba(100, 149, 237, 0.08);
+}
+
+.profile-editor-svg .profile-curve {
+  fill: none;
+  stroke: rgba(100, 149, 237, 0.9);
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.profile-editor-svg .profile-handle {
+  fill: var(--surface-color);
+  stroke: rgba(100, 149, 237, 0.9);
+  stroke-width: 2;
+  transition: r 0.1s ease;
+}
+
+.profile-editor-svg .profile-handle.active {
+  fill: rgba(100, 149, 237, 0.3);
+  stroke: #6495ed;
+  stroke-width: 2.5;
+}
+
+.profile-editor-svg .handle-label {
+  fill: var(--text-color);
+  font-size: 11px;
+  font-weight: 600;
+  font-family: "Courier New", monospace;
+  text-shadow: 0 0 4px var(--bg-color), 0 0 4px var(--bg-color);
+}
+
+.profile-editor-svg .editor-hint {
+  fill: #666;
+  font-size: 16px;
+  font-style: italic;
+}
+
+.profile-editor-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0.25rem;
+  font-size: 0.8rem;
+  color: #888;
+}
+
+.editor-hint-text {
+  font-style: italic;
+}
+
+.selected-point-info {
+  font-family: "Courier New", monospace;
+  color: var(--primary-color);
+}
+
+/* Profile Editor Panel */
+.profile-editor-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.profile-editor-controls {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.profile-name-group,
+.profile-template-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.profile-name-group label,
+.profile-template-group label {
+  font-size: 0.75rem;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.profile-name-group input {
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-color);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-color);
+  font-size: 0.9rem;
+  min-width: 200px;
+}
+
+.profile-name-group input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+.profile-template-group select {
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-color);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-color);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.profile-template-group select:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+.profile-points-summary {
+  font-size: 0.85rem;
+  color: #888;
+  padding: 0.5rem 0;
+}
+
+/* Points table */
+.profile-points-table {
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+}
+
+.profile-points-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.profile-points-table th {
+  background: var(--bg-color);
+  color: #888;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  position: sticky;
+  top: 0;
+}
+
+.profile-points-table td {
+  padding: 0.35rem 0.75rem;
+  border-top: 1px solid var(--border-color);
+  font-family: "Courier New", monospace;
+}
+
+/* Tab Navigation */
+.tab-nav {
+  display: flex;
+  gap: 0;
+  margin-bottom: 0;
+  border-bottom: 2px solid var(--border-color);
+}
+
+.tab-btn {
+  padding: 0.75rem 1.5rem;
+  background: transparent;
+  color: #888;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  border-radius: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.tab-btn:hover {
+  color: var(--text-color);
+  background: transparent;
+}
+
+.tab-btn.active {
+  color: var(--primary-color);
+  border-bottom-color: var(--primary-color);
+}
+
+.tab-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 0.15rem 0.4rem;
+  background: var(--error-color);
+  color: white;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  animation: pulse-badge 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-badge {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Section specific */
+.profile-section,
+.monitor-section {
+  border-top: none;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+/* Advanced bake button */
+button.btn-advanced {
+  background: var(--primary-color);
+}
+
+button.btn-advanced:hover {
+  background: #005a9e;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   header {
@@ -445,6 +714,10 @@ button.btn-stop:hover {
   }
 
   .control-panel {
+    flex-direction: column;
+  }
+
+  .profile-editor-controls {
     flex-direction: column;
   }
 }
