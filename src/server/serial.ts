@@ -244,6 +244,30 @@ export class SerialManager {
     await this.sendCommand('list settings');
   }
 
+  async dumpProfile(index: number): Promise<void> {
+    await this.sendCommand(`dump profile ${index}`);
+  }
+
+  async startBake(tempC: number, durationS?: number): Promise<void> {
+    if (durationS !== undefined) {
+      await this.sendCommand(`bake ${Math.round(tempC)} ${Math.round(durationS)}`);
+    } else {
+      await this.sendCommand(`bake ${Math.round(tempC)}`);
+    }
+  }
+
+  async setSetting(id: number, value: number): Promise<void> {
+    await this.sendCommand(`setting ${id} ${value}`);
+  }
+
+  async about(): Promise<void> {
+    await this.sendCommand('about');
+  }
+
+  async values(): Promise<void> {
+    await this.sendCommand('values');
+  }
+
   // --- Port configuration ---
 
   private async configurePort(): Promise<void> {

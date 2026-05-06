@@ -125,6 +125,16 @@ async function main() {
             } else if (cmd === 'listSettings') {
               await serialManager.listSettings();
               stateManager.addLogEntry('out', 'list settings');
+            } else if (cmd === 'dumpProfile' && typeof data.data?.index === 'number') {
+              await serialManager.dumpProfile(data.data.index);
+              stateManager.addLogEntry('out', `dump profile ${data.data.index}`);
+            } else if (cmd === 'bake' && typeof data.data?.temp === 'number') {
+              await serialManager.startBake(data.data.temp, data.data.duration);
+              const durStr = data.data.duration ? ` ${data.data.duration}` : '';
+              stateManager.addLogEntry('out', `bake ${data.data.temp}${durStr}`);
+            } else if (cmd === 'setting' && typeof data.data?.id === 'number') {
+              await serialManager.setSetting(data.data.id, data.data.value);
+              stateManager.addLogEntry('out', `setting ${data.data.id} ${data.data.value}`);
             } else if (cmd === 'raw' && typeof data.data?.text === 'string') {
               await serialManager.sendCommand(data.data.text);
               stateManager.addLogEntry('out', data.data.text);
