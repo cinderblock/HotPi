@@ -444,7 +444,8 @@ export async function buildWatchInMemory(
 // Run as CLI if executed directly
 if (import.meta.main) {
   const watchMode = process.argv.includes('--watch');
-  const outDir = process.argv.find(arg => !arg.startsWith('--')) || 'build';
+  // argv[0]=bun, argv[1]=script — only actual CLI args can name the out dir
+  const outDir = process.argv.slice(2).find(arg => !arg.startsWith('--')) || 'build';
 
   if (watchMode) {
     buildWatch(outDir, files => {
