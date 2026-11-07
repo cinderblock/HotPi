@@ -81,6 +81,8 @@ bun run status     # Check Pi status
 bun run lint       # Lint with Biome
 ```
 
+CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs `bun run build` on every push and pull request.
+
 ## License
 
 MIT — Copyright 2025 Cameron Tacklind
